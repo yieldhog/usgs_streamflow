@@ -97,10 +97,14 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         result = self._parse_response(data)
 
-        # Only update known_params from an online, non-empty response so that
-        # a seasonal offline fetch (empty reported_params) doesn't erase our
-        # knowledge of what sensors this station has.
-        if not result.station_offline and result.reported_params:
+        # Always update known_params when reported_params is non-empty.
+        # Offline/seasonal status means the values are stale, but the station
+        # still tells us exactly which parameters it has — a seasonal gauge
+        # with -999999 readings still has value_lists for its real sensors.
+        # Gating this on "not offline" caused the fallback in sensor.py to
+        # create all three sensors (including phantom temp) for every station
+        # that was offline at startup, even those that never had a temp sensor.
+        if result.reported_params:
             self.known_params.update(result.reported_params)
 
         return result
