@@ -2,7 +2,6 @@
   "domain": "usgs_streamflow",
   "name": "USGS Streamflow",
   "version": "1.0.0",
-  "homeassistant": "2026.3.0",
   "documentation": "https://github.com/yieldhog/usgs_streamflow",
   "issue_tracker": "https://github.com/yieldhog/usgs_streamflow/issues",
   "requirements": [],
