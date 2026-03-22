@@ -92,18 +92,30 @@ async def async_setup_entry(
     coordinator: USGSStreamflowCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities: list[SensorEntity] = [
-        # Station Status is always present so users see online/offline state
-        # even when the gauge is seasonally decommissioned.
+        # Station Status is always present so users can see online/offline
+        # state even when the gauge is seasonally decommissioned.
         USGSStationStatusSensor(coordinator, entry),
-        # All three measurement sensors are always registered.  Each one
-        # reports itself as unavailable when (a) the station is offline or
-        # (b) the station has never reported that parameter.  Registering
-        # them unconditionally is required so they appear correctly after
-        # an HA restart when the station happens to be offline at startup —
-        # previously the sensors would silently vanish until the next restart
-        # after the gauge came back online.
-        *(USGSStreamSensor(coordinator, entry, desc) for desc in SENSOR_DESCRIPTIONS),
     ]
+
+    # Determine which measurement sensors to register.
+    #
+    # After async_config_entry_first_refresh() (called in __init__.py before
+    # we arrive here), coordinator.known_params is populated if the station was
+    # online during that first fetch.  We use it to create only the sensors the
+    # station actually has.
+    #
+    # If known_params is still empty the station was offline at startup (e.g.,
+    # seasonal shutdown).  In that case we register all three sensors as a
+    # fallback so they appear when the station comes back online; the
+    # `available` property will correctly mark any unsupported params as
+    # Unavailable once the station is reachable and known_params is populated.
+    params_to_create = coordinator.known_params or {
+        desc.param_cd for desc in SENSOR_DESCRIPTIONS
+    }
+
+    for description in SENSOR_DESCRIPTIONS:
+        if description.param_cd in params_to_create:
+            entities.append(USGSStreamSensor(coordinator, entry, description))
 
     async_add_entities(entities)
 
@@ -172,23 +184,21 @@ class USGSStreamSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntit
         """Mark unavailable when station is offline or param is absent.
 
         Three distinct states:
-        1. coordinator.known_params is empty — we haven't had a successful
-           online fetch yet (HA just started, or station has been offline since
-           boot).  All sensors stay in an indeterminate state; don't hide them.
-        2. coordinator.known_params is populated and this param_cd is in it —
-           station confirmed it has this sensor.  Availability follows whether
-           the station is currently online.
-        3. coordinator.known_params is populated and this param_cd is NOT in it —
-           the station had a successful online fetch but never included this
-           parameter (e.g., no thermistor).  Surface as permanently unavailable
-           so the entity is visible in the list with a clear "Unavailable" state
-           rather than being silently absent.
+        1. known_params is empty — station was offline at startup; all sensors
+           are in an indeterminate state until the first successful online fetch.
+        2. known_params is populated and this param_cd is in it — station
+           confirmed it has this sensor; availability follows online/offline state.
+        3. known_params is populated and this param_cd is NOT in it — station
+           came back online and confirmed it doesn't have this sensor (only
+           possible if we fell through the offline-at-startup fallback path and
+           created all three sensors).  Mark permanently unavailable so the user
+           can see it and disable/remove it from the entity registry.
         """
         if not super().available:
             return False
         if self.coordinator.data is None:
             return False
-        # Case 3: station confirmed online before, but this param was never present
+        # Case 3: station confirmed online but this param never appeared
         if (
             self.coordinator.known_params
             and self.entity_description.param_cd not in self.coordinator.known_params

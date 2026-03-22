@@ -39,11 +39,18 @@ class CoordinatorData:
         reading_times: dict[str, datetime | None],
         station_offline: bool,
         offline_reason: str | None,
+        reported_params: set[str],
     ) -> None:
         self.values = values                    # param_cd -> float | None
         self.reading_times = reading_times      # param_cd -> datetime of last value
         self.station_offline = station_offline  # True when station appears shut down
         self.offline_reason = offline_reason    # Human-readable reason string
+        # Params that had a non-empty value_list in this fetch — meaning the
+        # station actually has a sensor for this parameter.  Distinct from
+        # values.keys(): when we request a param the station doesn't have,
+        # USGS returns the timeSeries header with an empty value_list rather
+        # than omitting the entry entirely.  An empty value_list = no sensor.
+        self.reported_params = reported_params
 
 
 class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -58,14 +65,12 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
         self.site_id = site_id
         self.site_name = site_name
-        # Tracks which parameter codes this station actually has, based on
-        # what appeared in the USGS timeSeries response during any successful
-        # online fetch.  Populated from values.keys() — NOT from which params
-        # returned non-None values — because a param can legitimately exist at
-        # a station while temporarily returning -999999 (USGS suppressed/missing
-        # sentinel).  Used by the sensor platform to show only sensors the
-        # station actually supports, while still registering all sensors
-        # unconditionally at setup to survive offline-at-startup restarts.
+        # Accumulates which parameter codes this station genuinely has sensors
+        # for, across all successful online fetches.  Populated from
+        # result.reported_params (params with a non-empty value_list), NOT from
+        # result.values.keys() — because USGS returns an empty timeSeries entry
+        # for params we requested but the station doesn't have, and treating
+        # those as real sensors creates phantom entities.
         self.known_params: set[str] = set()
 
     async def _async_update_data(self) -> CoordinatorData:
@@ -92,15 +97,11 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         result = self._parse_response(data)
 
-        # When the station is online, values.keys() is exactly the set of
-        # parameter codes the station has configured in USGS NWIS — regardless
-        # of whether the current reading is a real float or None (-999999
-        # sentinel).  Record these so sensors for absent params (e.g., no
-        # thermistor) can be surfaced as unavailable rather than hidden.
-        # We only update on non-offline responses; a seasonal/stale response
-        # with an empty values dict would otherwise clear our knowledge.
-        if not result.station_offline and result.values:
-            self.known_params.update(result.values.keys())
+        # Only update known_params from an online, non-empty response so that
+        # a seasonal offline fetch (empty reported_params) doesn't erase our
+        # knowledge of what sensors this station has.
+        if not result.station_offline and result.reported_params:
+            self.known_params.update(result.reported_params)
 
         return result
 
@@ -108,6 +109,8 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Parse USGS NWIS JSON into a CoordinatorData object."""
         values: dict[str, float | None] = {}
         reading_times: dict[str, datetime | None] = {}
+        # Only params with a non-empty value_list — station has this sensor.
+        reported_params: set[str] = set()
 
         try:
             time_series_list = data["value"]["timeSeries"]
@@ -122,6 +125,7 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 reading_times={},
                 station_offline=True,
                 offline_reason="Station is not currently reporting data (seasonal or discontinued)",
+                reported_params=set(),
             )
 
         # Use HA's dt_util so we get a timezone-aware UTC datetime.
@@ -138,9 +142,14 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 continue
 
             if not value_list:
-                values[param_cd] = None
-                reading_times[param_cd] = None
+                # USGS returned the series header but no data — this is how the
+                # API signals "this parameter was requested but does not exist
+                # at this station."  Skip entirely; do not add to reported_params
+                # or values so no phantom sensor is created for this param.
                 continue
+
+            # Station confirmed to have this sensor.
+            reported_params.add(param_cd)
 
             last_entry = value_list[-1]
             raw = last_entry.get("value")
@@ -177,7 +186,7 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         station_offline = False
         offline_reason: str | None = None
 
-        if values and not any_recent:
+        if reported_params and not any_recent:
             station_offline = True
             latest_times = [t for t in reading_times.values() if t is not None]
             if latest_times:
@@ -197,4 +206,5 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
             reading_times=reading_times,
             station_offline=station_offline,
             offline_reason=offline_reason,
+            reported_params=reported_params,
         )
