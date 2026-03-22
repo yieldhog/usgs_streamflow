@@ -58,11 +58,15 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
         self.site_id = site_id
         self.site_name = site_name
-        # Tracks which parameter codes this station has ever reported a non-None
-        # value for, across all fetches since HA started.  Used by the sensor
-        # platform to decide whether to surface a sensor as unavailable vs.
-        # permanently absent.
-        self.seen_params: set[str] = set()
+        # Tracks which parameter codes this station actually has, based on
+        # what appeared in the USGS timeSeries response during any successful
+        # online fetch.  Populated from values.keys() — NOT from which params
+        # returned non-None values — because a param can legitimately exist at
+        # a station while temporarily returning -999999 (USGS suppressed/missing
+        # sentinel).  Used by the sensor platform to show only sensors the
+        # station actually supports, while still registering all sensors
+        # unconditionally at setup to survive offline-at-startup restarts.
+        self.known_params: set[str] = set()
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch latest readings from USGS NWIS."""
@@ -88,10 +92,15 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         result = self._parse_response(data)
 
-        # Accumulate which params have ever returned real data
-        for param_cd, value in result.values.items():
-            if value is not None:
-                self.seen_params.add(param_cd)
+        # When the station is online, values.keys() is exactly the set of
+        # parameter codes the station has configured in USGS NWIS — regardless
+        # of whether the current reading is a real float or None (-999999
+        # sentinel).  Record these so sensors for absent params (e.g., no
+        # thermistor) can be surfaced as unavailable rather than hidden.
+        # We only update on non-offline responses; a seasonal/stale response
+        # with an empty values dict would otherwise clear our knowledge.
+        if not result.station_offline and result.values:
+            self.known_params.update(result.values.keys())
 
         return result
 

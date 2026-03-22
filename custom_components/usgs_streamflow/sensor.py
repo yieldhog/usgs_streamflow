@@ -171,30 +171,31 @@ class USGSStreamSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntit
     def available(self) -> bool:
         """Mark unavailable when station is offline or param is absent.
 
-        Three distinct unavailability cases:
-        1. Coordinator has not yet received any data (HA just started).
-        2. Station is seasonally decommissioned — shows "Unavailable" with a
-           grey chip rather than "Unknown", which is more accurate than a
-           station that simply hasn't been polled yet.
-        3. The station has successfully reported data before (seen_params is
-           non-empty) but has never included this parameter — e.g., a gauge
-           with no water temperature sensor.  In this case we surface the
-           sensor as permanently unavailable rather than hiding it, so the
-           user can see it in the entity list and understand why it has no
-           value.
+        Three distinct states:
+        1. coordinator.known_params is empty — we haven't had a successful
+           online fetch yet (HA just started, or station has been offline since
+           boot).  All sensors stay in an indeterminate state; don't hide them.
+        2. coordinator.known_params is populated and this param_cd is in it —
+           station confirmed it has this sensor.  Availability follows whether
+           the station is currently online.
+        3. coordinator.known_params is populated and this param_cd is NOT in it —
+           the station had a successful online fetch but never included this
+           parameter (e.g., no thermistor).  Surface as permanently unavailable
+           so the entity is visible in the list with a clear "Unavailable" state
+           rather than being silently absent.
         """
         if not super().available:
             return False
         if self.coordinator.data is None:
             return False
-        if self.coordinator.data.station_offline:
-            return False
-        # If we have seen at least one successful fetch but this param has
-        # never appeared, the station simply doesn't support it.
+        # Case 3: station confirmed online before, but this param was never present
         if (
-            self.coordinator.seen_params
-            and self.entity_description.param_cd not in self.coordinator.seen_params
+            self.coordinator.known_params
+            and self.entity_description.param_cd not in self.coordinator.known_params
         ):
+            return False
+        # Case 2: station is currently offline (seasonal/stale)
+        if self.coordinator.data.station_offline:
             return False
         return True
 
