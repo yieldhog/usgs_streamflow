@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Search USGS Stream Gauges",
+        "description": "Search by stream or station name, or paste a USGS site number directly (e.g. 06710247).\n\n[Find gauges on the USGS Water Resources site]({usgs_url})",
+        "data": {
+          "search_term": "Stream name or site number",
+          "state_code": "State code"
+        },
+        "data_description": {
+          "search_term": "Part of a stream name (e.g. \"Bear Creek\") or a USGS 8-digit site number",
+          "state_code": "Required for name searches — two-letter US state abbreviation (e.g. CO, CA, WA). Not needed when entering a site number directly."
+        }
+      },
+      "select_site": {
+        "title": "Select a Gauge Station",
+        "description": "Found {count} matching stations. Stations may show as Unavailable in winter if seasonally decommissioned.",
+        "data": {
+          "site_id": "Station"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the USGS API. Check your internet connection.",
+      "no_sites_found": "No active stream gauges matched. Try a broader name or a different state code.",
+      "search_required": "Please enter a stream name or site number.",
+      "state_required_for_name_search": "A state code is required when searching by name (e.g. CO). To search nationwide, enter a site number directly instead.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This gauge station is already configured."
+    }
+  }
+}
