@@ -1,11 +1,11 @@
 {
   "domain": "usgs_streamflow",
   "name": "USGS Streamflow",
-  "version": "1.0.0",
+  "codeowners": ["@yieldhog"],
+  "config_flow": true,
   "documentation": "https://github.com/yieldhog/usgs_streamflow",
+  "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/yieldhog/usgs_streamflow/issues",
   "requirements": [],
-  "config_flow": true,
-  "iot_class": "cloud_polling",
-  "codeowners": ["@yieldhog"]
+  "version": "1.0.0"
 }
