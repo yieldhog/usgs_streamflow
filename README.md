@@ -63,7 +63,7 @@ Measurement sensors for parameters a gauge never reports (e.g., Water Temperatur
 
 ## Data Source
 
-All data comes from the [USGS NWIS Instantaneous Values API]([https://waterservices.usgs.gov/rest/IV-Service.html](https://waterservices.usgs.gov/docs/instantaneous-values/instantaneous-values-details/)), which is free and requires no API key.
+All data comes from the [USGS NWIS Instantaneous Values API](https://waterservices.usgs.gov/rest/IV-Service.html), which is free and requires no API key.
 
 ## Contributing
 
