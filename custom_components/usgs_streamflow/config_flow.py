@@ -51,9 +51,8 @@ async def _search_usgs_sites(hass, search_term: str, state_code: str) -> list[di
     session = async_get_clientsession(hass)
     params: dict[str, str] = {
         "format": "rdb",
-        "siteType": "ST",       # streams only
         "siteStatus": "all",    # include seasonal — user should see all options
-        "hasDataTypeCd": "iv",  # must support instantaneous values
+        "hasDataTypeCd": "iv",  # only sites with instantaneous values (the data we poll)
     }
 
     # Detect if user pasted a site number directly
@@ -67,6 +66,12 @@ async def _search_usgs_sites(hass, search_term: str, state_code: str) -> list[di
 
     timeout = aiohttp.ClientTimeout(total=30)
     async with session.get(USGS_SITE_URL, params=params, timeout=timeout) as resp:
+        # The NWIS site service returns 404 when *no sites match* the query —
+        # this is documented behavior, not a transport error. Treat it as an
+        # empty result set so the flow shows "no sites found" rather than a
+        # spurious connection error.
+        if resp.status == 404:
+            return []
         if resp.status != 200:
             raise ConnectionError(f"USGS site search returned HTTP {resp.status}")
         text = await resp.text()
