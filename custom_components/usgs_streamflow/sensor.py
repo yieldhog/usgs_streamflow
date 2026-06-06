@@ -75,7 +75,7 @@ def _make_device_info(site_id: str, site_name: str) -> DeviceInfo:
         identifiers={(DOMAIN, site_id)},
         name=site_name,
         manufacturer="USGS",
-        model="NWIS Stream Gauge",
+        model="NWIS Monitoring Location",
         entry_type=DeviceEntryType.SERVICE,
         configuration_url=(
             f"https://waterdata.usgs.gov/monitoring-location/{site_id}/"
