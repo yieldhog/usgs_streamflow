@@ -9,8 +9,13 @@ import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -19,7 +24,18 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .const import CONF_SITE_ID, CONF_SITE_NAME, DOMAIN, USGS_SITE_URL
+from .const import (
+    CONF_ENABLED_PARAMETERS,
+    CONF_SCAN_INTERVAL,
+    CONF_SITE_ID,
+    CONF_SITE_NAME,
+    DEFAULT_SCAN_INTERVAL_MINUTES,
+    DOMAIN,
+    MAX_SCAN_INTERVAL_MINUTES,
+    MIN_SCAN_INTERVAL_MINUTES,
+    SUPPORTED_PARAMETERS,
+    USGS_SITE_URL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -124,6 +140,14 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> "USGSStreamflowOptionsFlow":
+        """Return the options flow handler."""
+        return USGSStreamflowOptionsFlow()
+
     def __init__(self) -> None:
         self._sites: list[dict] = []
 
@@ -210,3 +234,50 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={"count": str(len(self._sites))},
         )
+
+
+class USGSStreamflowOptionsFlow(config_entries.OptionsFlow):
+    """Options: poll interval and which parameters create sensors."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Manage the integration options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_SCAN_INTERVAL,
+                    default=options.get(
+                        CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
+                    ),
+                ): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_SCAN_INTERVAL_MINUTES,
+                        max=MAX_SCAN_INTERVAL_MINUTES,
+                        step=1,
+                        mode=NumberSelectorMode.BOX,
+                        unit_of_measurement="min",
+                    )
+                ),
+                vol.Optional(
+                    CONF_ENABLED_PARAMETERS,
+                    default=options.get(
+                        CONF_ENABLED_PARAMETERS, list(SUPPORTED_PARAMETERS)
+                    ),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=code, label=label)
+                            for code, label in SUPPORTED_PARAMETERS.items()
+                        ],
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

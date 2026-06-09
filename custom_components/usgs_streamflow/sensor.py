@@ -11,19 +11,28 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfLength, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_ENABLED_PARAMETERS,
     CONF_SITE_ID,
     CONF_SITE_NAME,
     DOMAIN,
     PARAM_DISCHARGE,
+    PARAM_DISSOLVED_OXYGEN,
+    PARAM_DO_PCT_SAT,
     PARAM_GAUGE_HEIGHT,
+    PARAM_GW_DEPTH,
+    PARAM_PH,
+    PARAM_PRECIPITATION,
+    PARAM_SPECIFIC_CONDUCTANCE,
+    PARAM_TURBIDITY,
     PARAM_WATER_TEMP,
+    SUPPORTED_PARAMETERS,
 )
 from .coordinator import USGSStreamflowCoordinator
 
@@ -66,6 +75,71 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
+    ),
+    USGSSensorDescription(
+        key="specific_conductance",
+        param_cd=PARAM_SPECIFIC_CONDUCTANCE,
+        name="Specific Conductance",
+        native_unit_of_measurement="µS/cm",
+        icon="mdi:flash",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+    ),
+    USGSSensorDescription(
+        key="dissolved_oxygen",
+        param_cd=PARAM_DISSOLVED_OXYGEN,
+        name="Dissolved Oxygen",
+        native_unit_of_measurement="mg/L",
+        icon="mdi:gas-cylinder",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+    ),
+    USGSSensorDescription(
+        key="do_pct_saturation",
+        param_cd=PARAM_DO_PCT_SAT,
+        name="Dissolved Oxygen (% Saturation)",
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:percent",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+    ),
+    USGSSensorDescription(
+        key="ph",
+        param_cd=PARAM_PH,
+        name="pH",
+        device_class=SensorDeviceClass.PH,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+    ),
+    USGSSensorDescription(
+        key="turbidity",
+        param_cd=PARAM_TURBIDITY,
+        name="Turbidity",
+        native_unit_of_measurement="FNU",
+        icon="mdi:water-opacity",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+    ),
+    USGSSensorDescription(
+        key="precipitation",
+        param_cd=PARAM_PRECIPITATION,
+        name="Precipitation",
+        # USGS 00045 is incremental precip per reporting interval; exposed as
+        # a plain measurement in inches, not an accumulating total.
+        native_unit_of_measurement="in",
+        icon="mdi:weather-rainy",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+    ),
+    USGSSensorDescription(
+        key="gw_depth",
+        param_cd=PARAM_GW_DEPTH,
+        name="Depth to Water Level",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.FEET,
+        icon="mdi:water-well",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
     ),
 )
 
@@ -113,8 +187,19 @@ async def async_setup_entry(
         desc.param_cd for desc in SENSOR_DESCRIPTIONS
     }
 
+    # Honor the user's parameter selection from the options flow.  When unset
+    # (the default), every supported parameter is eligible; the
+    # station-reports gating above still limits creation to params that the
+    # site actually serves.
+    enabled = set(
+        entry.options.get(CONF_ENABLED_PARAMETERS) or SUPPORTED_PARAMETERS.keys()
+    )
+
     for description in SENSOR_DESCRIPTIONS:
-        if description.param_cd in params_to_create:
+        if (
+            description.param_cd in params_to_create
+            and description.param_cd in enabled
+        ):
             entities.append(USGSStreamSensor(coordinator, entry, description))
 
     async_add_entities(entities)

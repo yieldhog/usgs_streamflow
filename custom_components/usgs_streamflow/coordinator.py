@@ -13,17 +13,15 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
-    SCAN_INTERVAL_MINUTES,
+    SUPPORTED_PARAMETERS,
     USGS_IV_URL,
-    PARAM_DISCHARGE,
-    PARAM_GAUGE_HEIGHT,
-    PARAM_WATER_TEMP,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-FETCH_PARAMS = ",".join([PARAM_GAUGE_HEIGHT, PARAM_DISCHARGE, PARAM_WATER_TEMP])
+FETCH_PARAMS = ",".join(SUPPORTED_PARAMETERS.keys())
 
 # If the most recent USGS reading is older than this, the station is likely
 # seasonally shut down or decommissioned.
@@ -56,12 +54,18 @@ class CoordinatorData:
 class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """Coordinator that polls the USGS NWIS Instantaneous Values API."""
 
-    def __init__(self, hass: HomeAssistant, site_id: str, site_name: str) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        site_id: str,
+        site_name: str,
+        update_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
             name=f"USGS {site_name}",
-            update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
+            update_interval=timedelta(minutes=update_interval_minutes),
         )
         self.site_id = site_id
         self.site_name = site_name

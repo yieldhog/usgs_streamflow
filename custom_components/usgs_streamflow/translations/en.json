@@ -10,7 +10,7 @@
         },
         "data_description": {
           "search_term": "Part of a stream name (e.g. \"Bear Creek\") or a USGS 8-digit site number",
-          "state_code": "Required for name searches — two-letter US state abbreviation (e.g. CO, CA, WA). Not needed when entering a site number directly."
+          "state_code": "Required for name searches \u2014 two-letter US state abbreviation (e.g. CO, CA, WA). Not needed when entering a site number directly."
         }
       },
       "select_site": {
@@ -30,6 +30,22 @@
     },
     "abort": {
       "already_configured": "This gauge station is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "USGS Streamflow Options",
+        "description": "Adjust how often data is polled and which measurements appear as sensors. Only parameters the station actually reports will create sensors.",
+        "data": {
+          "scan_interval_minutes": "Update interval (minutes)",
+          "enabled_parameters": "Parameters to show"
+        },
+        "data_description": {
+          "scan_interval_minutes": "How often to poll USGS. Instantaneous data refreshes about every 15 minutes, so lower values add load without new data.",
+          "enabled_parameters": "Unchecked parameters won't create sensors even if the station reports them. Changing this reloads the integration."
+        }
+      }
     }
   }
 }

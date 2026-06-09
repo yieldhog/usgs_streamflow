@@ -1,0 +1,252 @@
+# =============================================================================
+# USGS Streamflow — example helpers for monitoring a nearby stream or lake
+# =============================================================================
+#
+# These are EXAMPLES built entirely on Home Assistant's built-in integrations
+# (statistics, derivative, trend, threshold, template, automation). The
+# usgs_streamflow integration exposes well-formed measurement sensors; these
+# turn them into trends, rolling stats, condition flags, and alerts.
+#
+# HOW TO USE
+#   - Easiest: drop this file in  config/packages/  and make sure your
+#     configuration.yaml has:
+#         homeassistant:
+#           packages: !include_dir_named packages
+#   - Or copy individual sections into your existing template:/sensor:/etc.
+#     (If you split config with !include, remove the top-level domain key from
+#     the included file, per HA's include rules.)
+#
+# BEFORE IT WORKS
+#   1. Replace every "my_stream" entity id below with your actual entity ids.
+#      Find them in Developer Tools > States (search for your station name).
+#      Typical ids from this integration:
+#        sensor.my_stream_discharge            (ft3/s)
+#        sensor.my_stream_gauge_height         (ft)
+#        sensor.my_stream_water_temperature    (degC)
+#        sensor.my_stream_turbidity            (FNU)
+#        sensor.my_stream_station_status       (Active / Offline)
+#   2. Tune every threshold. Flow ranges, fishing limits, and flood/action
+#      stages are PLACEHOLDERS — they are specific to your water body, your
+#      use case, and (for stage) the gauge's own datum. Gauge height is not
+#      comparable across sites, so copy flood stages from the NWS page for
+#      THIS gauge, in its units.
+#   3. statistics, derivative, and trend need history — they populate only
+#      after enough samples accumulate, and require the source sensor to be
+#      retained by the recorder.
+#
+# Replace notify.notify with your own notifier (e.g. notify.mobile_app_xxx).
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Rolling statistics — averages, extremes, and net change over a window
+# -----------------------------------------------------------------------------
+sensor:
+  - platform: statistics
+    name: "My Stream Discharge 24h Avg"
+    entity_id: sensor.my_stream_discharge
+    state_characteristic: mean
+    max_age:
+      hours: 24
+    precision: 1
+
+  - platform: statistics
+    name: "My Stream Discharge 24h Change"
+    entity_id: sensor.my_stream_discharge
+    state_characteristic: change
+    max_age:
+      hours: 24
+    precision: 1
+
+  - platform: statistics
+    name: "My Stream Gauge Height 7d Max"
+    entity_id: sensor.my_stream_gauge_height
+    state_characteristic: value_max
+    max_age:
+      days: 7
+    precision: 2
+
+  - platform: statistics
+    name: "My Stream Gauge Height 7d Change"
+    entity_id: sensor.my_stream_gauge_height
+    state_characteristic: change
+    max_age:
+      days: 7
+    precision: 2
+
+  - platform: statistics
+    name: "My Stream Water Temp 24h Max"
+    entity_id: sensor.my_stream_water_temperature
+    state_characteristic: value_max
+    max_age:
+      hours: 24
+    precision: 1
+
+  # ---------------------------------------------------------------------------
+  # Rate of rise (ft/hr) — the key flash-flood / dropping-water signal
+  # ---------------------------------------------------------------------------
+  - platform: derivative
+    name: "My Stream Rate of Rise"
+    source: sensor.my_stream_gauge_height
+    unit_time: h
+    time_window: "01:00:00"   # smooth over the last hour
+    round: 2
+
+
+# -----------------------------------------------------------------------------
+# Trend + threshold binary sensors
+# -----------------------------------------------------------------------------
+binary_sensor:
+  # Simple rising/not-rising flag on gauge height.
+  - platform: trend
+    sensors:
+      my_stream_rising:
+        friendly_name: "My Stream Rising"
+        entity_id: sensor.my_stream_gauge_height
+        sample_duration: 3600   # look back 1 hour
+        max_samples: 12
+        min_gradient: 0.0003    # ft per second ~= 0.001 ft/min; tune for your gauge
+
+  # "Above action stage" with hysteresis so it doesn't flap at the boundary.
+  # Set `upper` to YOUR gauge's NWS action stage (feet, same datum).
+  - platform: threshold
+    name: "My Stream Above Action Stage"
+    entity_id: sensor.my_stream_gauge_height
+    upper: 8.0
+    hysteresis: 0.25
+    device_class: problem
+
+
+# -----------------------------------------------------------------------------
+# Template sensors — human-readable condition + trend
+# -----------------------------------------------------------------------------
+template:
+  - sensor:
+      # Flow condition for recreation. Tune the cutoffs to your stream (these
+      # are illustrative cfs values, not authoritative).
+      - name: "My Stream Flow Condition"
+        unique_id: my_stream_flow_condition
+        state: >
+          {% set q = states('sensor.my_stream_discharge') | float(none) %}
+          {% if q is none %} Unknown
+          {% elif q < 30 %} Too Low
+          {% elif q <= 250 %} Ideal
+          {% elif q <= 600 %} High
+          {% else %} Blown Out
+          {% endif %}
+        availability: "{{ has_value('sensor.my_stream_discharge') }}"
+        icon: mdi:waves
+
+      # Rising / Falling / Steady text derived from the rate-of-rise sensor.
+      - name: "My Stream Trend"
+        unique_id: my_stream_trend
+        state: >
+          {% set r = states('sensor.my_stream_rate_of_rise') | float(0) %}
+          {% if r > 0.05 %} Rising
+          {% elif r < -0.05 %} Falling
+          {% else %} Steady
+          {% endif %}
+        icon: >
+          {% set r = states('sensor.my_stream_rate_of_rise') | float(0) %}
+          {% if r > 0.05 %} mdi:trending-up
+          {% elif r < -0.05 %} mdi:trending-down
+          {% else %} mdi:trending-neutral
+          {% endif %}
+
+      # Lake/reservoir net change over a week, with a friendly descriptor.
+      # Uses a 7-day "change" statistic you can add like the ones above.
+      - name: "My Lake Weekly Change"
+        unique_id: my_lake_weekly_change
+        state: >
+          {% set c = states('sensor.my_stream_gauge_height_7d_change') | float(none) %}
+          {% if c is none %} Unknown
+          {% elif c > 0.1 %} Up {{ '%.2f' | format(c) }} ft
+          {% elif c < -0.1 %} Down {{ '%.2f' | format(c | abs) }} ft
+          {% else %} Holding steady
+          {% endif %}
+
+  - binary_sensor:
+      # Quick "good to fish" gate: flow in range, cool enough, not too muddy.
+      # Adjust the numbers for your target species and water body.
+      - name: "My Stream Good To Fish"
+        unique_id: my_stream_good_to_fish
+        state: >
+          {% set q = states('sensor.my_stream_discharge') | float(none) %}
+          {% set t = states('sensor.my_stream_water_temperature') | float(none) %}
+          {% set turb = states('sensor.my_stream_turbidity') | float(0) %}
+          {{ q is not none and t is not none
+             and 50 <= q <= 300 and t <= 20 and turb < 10 }}
+        availability: >
+          {{ has_value('sensor.my_stream_discharge')
+             and has_value('sensor.my_stream_water_temperature') }}
+        icon: mdi:fish
+
+
+# -----------------------------------------------------------------------------
+# Automations — alerts worth having for a water body you care about
+# -----------------------------------------------------------------------------
+automation:
+  - alias: "Stream rising fast"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.my_stream_rate_of_rise
+        above: 0.5            # ft/hr — tune to your channel
+        for:
+          minutes: 15
+    conditions: []
+    actions:
+      - action: notify.notify
+        data:
+          title: "Stream rising fast"
+          message: >
+            {{ states('sensor.my_stream_gauge_height') }} ft and climbing
+            {{ states('sensor.my_stream_rate_of_rise') }} ft/hr.
+    mode: single
+
+  - alias: "Stream exceeded action stage"
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.my_stream_above_action_stage
+        to: "on"
+    conditions: []
+    actions:
+      - action: notify.notify
+        data:
+          title: "Stream above action stage"
+          message: >
+            Gauge height {{ states('sensor.my_stream_gauge_height') }} ft has
+            crossed your action threshold.
+    mode: single
+
+  - alias: "Stream gauge reporting offline"
+    triggers:
+      - trigger: state
+        entity_id: sensor.my_stream_station_status
+        to: "Offline"
+        for:
+          hours: 6
+    conditions: []
+    actions:
+      - action: notify.notify
+        data:
+          message: >
+            USGS gauge for my stream has been offline for 6+ hours
+            (may be seasonal).
+    mode: single
+
+  - alias: "Stream water temperature high for trout"
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.my_stream_water_temperature
+        above: 20            # degC — trout stress threshold; adjust per species
+        for:
+          minutes: 30
+    conditions: []
+    actions:
+      - action: notify.notify
+        data:
+          title: "Warm water"
+          message: >
+            Water temperature is {{ states('sensor.my_stream_water_temperature') }}
+            degC — consider holding off to avoid stressing fish.
+    mode: single

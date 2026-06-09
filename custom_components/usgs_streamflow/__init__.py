@@ -4,7 +4,13 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_SITE_ID, CONF_SITE_NAME, DOMAIN
+from .const import (
+    CONF_SCAN_INTERVAL,
+    CONF_SITE_ID,
+    CONF_SITE_NAME,
+    DEFAULT_SCAN_INTERVAL_MINUTES,
+    DOMAIN,
+)
 from .coordinator import USGSStreamflowCoordinator
 
 PLATFORMS = ["sensor"]
@@ -12,17 +18,30 @@ PLATFORMS = ["sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up USGS Streamflow from a config entry."""
+    interval = int(
+        entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
+    )
+
     coordinator = USGSStreamflowCoordinator(
         hass,
         site_id=entry.data[CONF_SITE_ID],
         site_name=entry.data[CONF_SITE_NAME],
+        update_interval_minutes=interval,
     )
 
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Reload the entry when its options change (scan interval / parameter set).
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry when options are updated."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
