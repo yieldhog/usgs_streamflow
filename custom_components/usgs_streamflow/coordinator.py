@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -15,6 +16,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
+    HISTORY_RETENTION_MINUTES,
     SUPPORTED_PARAMETERS,
     USGS_IV_URL,
 )
@@ -76,6 +78,14 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # for params we requested but the station doesn't have, and treating
         # those as real sensors creates phantom entities.
         self.known_params: set[str] = set()
+        # Rolling buffer of recent observations per parameter code, used by
+        # the derived rate-of-change and trend sensors.  Keyed by reading
+        # timestamp so repeated transmissions of the same observation are
+        # not double-counted.  In memory only: cleared on restart/reload, so
+        # derived sensors warm up over the first couple of polls.
+        self._history: dict[str, deque[tuple[datetime, float]]] = defaultdict(
+            deque
+        )
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch latest readings from USGS NWIS."""
@@ -111,7 +121,43 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if result.reported_params:
             self.known_params.update(result.reported_params)
 
+        self._append_history(result)
+
         return result
+
+    def _append_history(self, result: CoordinatorData) -> None:
+        """Record new (reading_time, value) points for derived sensors.
+
+        Only genuinely new observations are stored: a point is appended just
+        when its reading timestamp is newer than the last buffered one, so a
+        station that re-transmits the same reading across several polls does
+        not inflate the buffer or flatten the computed rate.
+        """
+        for param_cd, value in result.values.items():
+            if value is None:
+                continue
+            reading_dt = result.reading_times.get(param_cd)
+            if reading_dt is None:
+                continue
+            buf = self._history[param_cd]
+            if buf and reading_dt <= buf[-1][0]:
+                continue
+            buf.append((reading_dt, value))
+            cutoff = reading_dt - timedelta(minutes=HISTORY_RETENTION_MINUTES)
+            while buf and buf[0][0] < cutoff:
+                buf.popleft()
+
+    def recent_points(
+        self, param_cd: str, window_minutes: int
+    ) -> list[tuple[datetime, float]]:
+        """Return buffered (time, value) points within ``window_minutes`` of
+        the most recent observation, oldest first."""
+        buf = self._history.get(param_cd)
+        if not buf:
+            return []
+        newest = buf[-1][0]
+        cutoff = newest - timedelta(minutes=window_minutes)
+        return [(t, v) for (t, v) in buf if t >= cutoff]
 
     def _parse_response(self, data: Any) -> CoordinatorData:
         """Parse USGS NWIS JSON into a CoordinatorData object."""

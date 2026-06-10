@@ -41,6 +41,18 @@ _LOGGER = logging.getLogger(__name__)
 
 # USGS site numbers are 6–15 digit strings (zero-padded, varies by region)
 _SITE_NUMBER_RE = re.compile(r"^\d{6,15}$")
+_AGENCY_PREFIX_RE = re.compile(r"^[A-Za-z]+-")
+
+
+def _normalize_site_number(raw: str) -> str:
+    """Strip whitespace and an optional agency prefix (e.g. 'USGS-') from input.
+
+    USGS site numbers are 6-15 digits: surface-water sites are typically 8,
+    while groundwater, combined-sewer, and other lat/long-based IDs run to 15.
+    WDFN monitoring-location pages display these IDs with a 'USGS-' prefix, so
+    we strip it before deciding whether the input is a site number.
+    """
+    return _AGENCY_PREFIX_RE.sub("", raw.strip())
 
 USGS_WATER_DATA_URL = "https://waterdata.usgs.gov/nwis/rt"
 
@@ -71,9 +83,10 @@ async def _search_usgs_sites(hass, search_term: str, state_code: str) -> list[di
         "hasDataTypeCd": "iv",  # only sites with instantaneous values (the data we poll)
     }
 
-    # Detect if user pasted a site number directly
-    if _SITE_NUMBER_RE.match(search_term.strip()):
-        params["sites"] = search_term.strip()
+    # Detect if user pasted a site number directly (optionally "USGS-" prefixed)
+    candidate = _normalize_site_number(search_term)
+    if _SITE_NUMBER_RE.match(candidate):
+        params["sites"] = candidate
     else:
         params["siteName"] = search_term.strip()
 
@@ -163,7 +176,9 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not search_term:
                 errors["search_term"] = "search_required"
-            elif not _SITE_NUMBER_RE.match(search_term) and not state_code:
+            elif not _SITE_NUMBER_RE.match(
+                _normalize_site_number(search_term)
+            ) and not state_code:
                 # Name searches without a state code return thousands of results
                 # and can cause the API response to time out or be unparseable.
                 errors["state_code"] = "state_required_for_name_search"

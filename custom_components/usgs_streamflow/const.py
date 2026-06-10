@@ -15,6 +15,17 @@ DEFAULT_SCAN_INTERVAL_MINUTES = 15
 MIN_SCAN_INTERVAL_MINUTES = 15
 MAX_SCAN_INTERVAL_MINUTES = 1440
 
+# Derived (rate-of-change / trend) sensor settings.
+# Rate is computed over a trailing window of actual USGS observations and
+# expressed per hour; the buffer is retained a bit longer than the window
+# so a full window is available even when transmissions arrive in bursts.
+DERIVED_RATE_WINDOW_MINUTES = 60
+HISTORY_RETENTION_MINUTES = 180
+# Require at least this much elapsed time between the oldest and newest
+# samples before reporting a rate, so a pair of near-simultaneous readings
+# can't produce an enormous extrapolated value.
+MIN_RATE_SPAN_MINUTES = 5
+
 # USGS NWIS parameter codes.
 PARAM_DISCHARGE = "00060"             # Discharge, cubic feet per second
 PARAM_GAUGE_HEIGHT = "00065"          # Gauge height, feet
