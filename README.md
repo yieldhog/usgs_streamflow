@@ -57,8 +57,20 @@ After a site is added, click **Configure** on the integration entry to adjust:
 
 - **Update interval** — how often to poll USGS, in minutes (minimum 15; lower values add load without new data, since instantaneous values refresh about every 15 minutes)
 - **Parameters to show** — uncheck any measurements you don't want as sensors. Unchecked parameters won't create sensors even if the site reports them.
+- **API key** *(optional)* — an [api.data.gov](https://api.data.gov/signup/) key for the modernized USGS API (see below). Leave blank to use a shared, rate-limited demo key when the modern backend is enabled. The default (legacy) data source ignores it.
+- **Data source** *(advanced)* — choose which USGS API this entry polls: **Legacy** (WaterServices, the stable default) or **Modern** (the Water Data OGC API). Only visible with Home Assistant **Advanced Mode** enabled.
 
 Changing options reloads the integration entry.
+
+## Modernized USGS API (beta)
+
+USGS is retiring the legacy **WaterServices** API (decommission planned for Q1 2027) in favor of the new **[Water Data OGC API](https://api.waterdata.usgs.gov/ogcapi/v0)**. This integration is migrating in stages, behind a per-entry switch:
+
+- The **Legacy** backend remains the default, so existing setups are unchanged.
+- With **Advanced Mode** on, set an entry's **Data source → Modern** to poll the new API. The modern backend needs an api.data.gov key (a free [signup](https://api.data.gov/signup/); the built-in `DEMO_KEY` works for light testing but is heavily rate-limited) and adds extra sensor attributes (approval status, qualifier, statistic/time-series id).
+- To compare them, add the **same gauge twice** — one Legacy, one Modern — and watch the raw measurement sensors over a day or two.
+
+The modern backend is still in beta; please report any mismatches. See [`MIGRATION.md`](MIGRATION.md) for the full plan and status.
 
 ## Sensors
 
@@ -93,7 +105,7 @@ Replace the placeholder entity ids with your own and tune the thresholds — flo
 
 ## Data Source
 
-All data comes from the [USGS NWIS Instantaneous Values API](https://waterservices.usgs.gov/rest/IV-Service.html), which is free and requires no API key.
+By default, data comes from the [USGS NWIS Instantaneous Values API](https://waterservices.usgs.gov/rest/IV-Service.html), which is free and requires no API key. An opt-in **Modern** backend (the [Water Data OGC API](https://api.waterdata.usgs.gov/ogcapi/v0)) is available per entry — see [Modernized USGS API (beta)](#modernized-usgs-api-beta) above.
 
 ## Contributing
 

@@ -1,9 +1,43 @@
 # USGS Streamflow — Legacy → Modernized API Migration
 
-**Status:** Planning complete (Gate 0 closed). No production code changed yet.
-**Last verified:** 2026-06-10
-**Target integration version for the migration beta:** `1.2.0bX`
-**Current shipped version:** `1.1.0b2`
+**Status:** Phases A–D implemented and shipping in the migration beta. Default
+backend is still **legacy**, so existing entries are unaffected until opted in.
+Phase E (cutover) is future work.
+**Last verified:** 2026-06-19
+**Migration beta version:** `1.2.0b2` (branch `new-api-transition`, merged to `beta`)
+**Baseline before migration:** `1.1.0b2`
+
+> ### Progress (2026-06-19)
+> - ✅ **Phase A** — client abstraction (`client.py`, `LegacyClient`); coordinator
+>   and config flow route through it; legacy behavior verified byte-for-byte.
+> - ✅ **Phase B** — per-entry api.data.gov key (config + options), pre-filled
+>   across entries; legacy ignores it.
+> - ✅ **Phase C** — `ModernClient` (OGC API) with `X-Api-Key` auth, `DEMO_KEY`
+>   fallback, and 429 backoff; richer sensor attributes (approval status,
+>   qualifier, statistic/series id). Parity-first: same 10 parameters/values.
+> - ✅ **Phase D** — advanced per-entry **backend selector** (legacy default |
+>   modern); the coordinator stays backend-agnostic so the client is the only
+>   variable in the A/B.
+> - 🔜 **Phase E** — cutover (flip default to modern, migrate entries, retire
+>   legacy before Q1 2027).
+>
+> **Design decisions made during implementation**
+> - Offline detection lives in the coordinator (backend-independent); reported
+>   parameters are derived from the poll readings on **both** backends, keeping
+>   the legacy↔modern A/B apples-to-apples.
+> - `X-Api-Key`/429 work landed in Phase C (with the modern backend, its only
+>   consumer) rather than Phase B; only HTTP 429 + `Retry-After` are relied on,
+>   not the unconfirmed "remaining requests" headers.
+> - Unknown/missing `backend` value falls back to legacy, so an entry can never
+>   accidentally land on the alpha API.
+>
+> **Verification note:** the live two-site A/B was run by the maintainer's HACS
+> beta (egress to the OGC host is blocked in CI); automated checks here are
+> fixture-based. Promote the ⚠️ items below to ✅ as the beta confirms them.
+>
+> **Next feature (not in this migration):** percent-of-normal / streamflow
+> condition from the USGS daily-statistics (percentile) API — still ⚠️ unverified
+> (see §5, §11). Needs the stats endpoint confirmed before any code depends on it.
 
 This document is the single source of truth for moving `usgs_streamflow` off the
 deprecating USGS **WaterServices** API (`waterservices.usgs.gov`) and onto the
