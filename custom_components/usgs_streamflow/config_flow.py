@@ -2,15 +2,12 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -24,6 +21,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from .client import LegacyClient, SiteHit
 from .const import (
     CONF_ENABLED_PARAMETERS,
     CONF_SCAN_INTERVAL,
@@ -33,119 +31,22 @@ from .const import (
     DOMAIN,
     MAX_SCAN_INTERVAL_MINUTES,
     MIN_SCAN_INTERVAL_MINUTES,
+    SITE_NUMBER_RE,
     SUPPORTED_PARAMETERS,
-    USGS_SITE_URL,
+    normalize_site_number,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-# USGS site numbers are 6–15 digit strings (zero-padded, varies by region)
-_SITE_NUMBER_RE = re.compile(r"^\d{6,15}$")
-_AGENCY_PREFIX_RE = re.compile(r"^[A-Za-z]+-")
-
-
-def _normalize_site_number(raw: str) -> str:
-    """Strip whitespace and an optional agency prefix (e.g. 'USGS-') from input.
-
-    USGS site numbers are 6-15 digits: surface-water sites are typically 8,
-    while groundwater, combined-sewer, and other lat/long-based IDs run to 15.
-    WDFN monitoring-location pages display these IDs with a 'USGS-' prefix, so
-    we strip it before deciding whether the input is a site number.
-    """
-    return _AGENCY_PREFIX_RE.sub("", raw.strip())
-
 USGS_WATER_DATA_URL = "https://waterdata.usgs.gov/nwis/rt"
 
-# USGS RDB responses return numeric FIPS state codes (e.g. "08"), not
-# two-letter abbreviations.  This mapping converts them for display.
-_FIPS_TO_STATE: dict[str, str] = {
-    "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA",
-    "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL",
-    "13": "GA", "15": "HI", "16": "ID", "17": "IL", "18": "IN",
-    "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME",
-    "24": "MD", "25": "MA", "26": "MI", "27": "MN", "28": "MS",
-    "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
-    "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND",
-    "39": "OH", "40": "OK", "41": "OR", "42": "PA", "44": "RI",
-    "45": "SC", "46": "SD", "47": "TN", "48": "TX", "49": "UT",
-    "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI",
-    "56": "WY", "60": "AS", "66": "GU", "69": "MP", "72": "PR",
-    "78": "VI",
-}
 
-
-async def _search_usgs_sites(hass, search_term: str, state_code: str) -> list[dict]:
-    """Query USGS NWIS site service. Supports name search or direct site number lookup."""
-    session = async_get_clientsession(hass)
-    params: dict[str, str] = {
-        "format": "rdb",
-        "siteStatus": "all",    # include seasonal — user should see all options
-        "hasDataTypeCd": "iv",  # only sites with instantaneous values (the data we poll)
-    }
-
-    # Detect if user pasted a site number directly (optionally "USGS-" prefixed)
-    candidate = _normalize_site_number(search_term)
-    if _SITE_NUMBER_RE.match(candidate):
-        params["sites"] = candidate
-    else:
-        params["siteName"] = search_term.strip()
-
-    if state_code.strip():
-        params["stateCd"] = state_code.strip().upper()
-
-    timeout = aiohttp.ClientTimeout(total=30)
-    async with session.get(USGS_SITE_URL, params=params, timeout=timeout) as resp:
-        # The NWIS site service returns 404 when *no sites match* the query —
-        # this is documented behavior, not a transport error. Treat it as an
-        # empty result set so the flow shows "no sites found" rather than a
-        # spurious connection error.
-        if resp.status == 404:
-            return []
-        if resp.status != 200:
-            raise ConnectionError(f"USGS site search returned HTTP {resp.status}")
-        text = await resp.text()
-
-    return _parse_rdb_sites(text)
-
-
-def _parse_rdb_sites(rdb_text: str) -> list[dict]:
-    """Parse USGS RDB (tab-delimited) site response into a list of dicts."""
-    sites: list[dict] = []
-    lines = [line for line in rdb_text.splitlines() if not line.startswith("#")]
-    if len(lines) < 3:
-        return sites
-
-    headers = lines[0].split("\t")
-    # lines[1] is the column type descriptor row — skip it
-    for line in lines[2:]:
-        cols = line.split("\t")
-        if len(cols) < len(headers):
-            continue
-        row = dict(zip(headers, cols))
-        site_no = row.get("site_no", "").strip()
-        station_nm = row.get("station_nm", "").strip()
-        # USGS RDB returns a numeric FIPS code in state_cd (e.g. "08"), not
-        # a two-letter abbreviation.  Convert it for a readable label.
-        fips_cd = row.get("state_cd", "").strip()
-        state_abbrev = _FIPS_TO_STATE.get(fips_cd, fips_cd)  # fallback: raw value
-
-        if not site_no or not station_nm:
-            continue
-
-        label = f"{station_nm} (#{site_no})"
-        if state_abbrev:
-            label += f"  [{state_abbrev}]"
-
-        sites.append(
-            {
-                "site_id": site_no,
-                "name": station_nm,
-                "state": state_abbrev,
-                "label": label,
-            }
-        )
-
-    return sites[:50]  # cap to keep selector manageable
+def _format_site_label(site: SiteHit) -> str:
+    """Build the selector label for a search hit (name, number, optional state)."""
+    label = f"{site.site_name} (#{site.site_id})"
+    if site.state:
+        label += f"  [{site.state}]"
+    return label
 
 
 class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -162,7 +63,7 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return USGSStreamflowOptionsFlow()
 
     def __init__(self) -> None:
-        self._sites: list[dict] = []
+        self._sites: list[SiteHit] = []
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -176,15 +77,16 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not search_term:
                 errors["search_term"] = "search_required"
-            elif not _SITE_NUMBER_RE.match(
-                _normalize_site_number(search_term)
+            elif not SITE_NUMBER_RE.match(
+                normalize_site_number(search_term)
             ) and not state_code:
                 # Name searches without a state code return thousands of results
                 # and can cause the API response to time out or be unparseable.
                 errors["state_code"] = "state_required_for_name_search"
             else:
                 try:
-                    sites = await _search_usgs_sites(self.hass, search_term, state_code)
+                    client = LegacyClient(self.hass)
+                    sites = await client.search_sites(search_term, state=state_code)
                 except Exception as err:
                     _LOGGER.exception("Error contacting USGS site search API: %s", err)
                     errors["base"] = "cannot_connect"
@@ -219,20 +121,22 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             site_id = user_input["site_id"]
-            site = next((s for s in self._sites if s["site_id"] == site_id), None)
+            site = next((s for s in self._sites if s.site_id == site_id), None)
             if site:
                 await self.async_set_unique_id(f"usgs_{site_id}")
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=site["name"],
+                    title=site.site_name,
                     data={
                         CONF_SITE_ID: site_id,
-                        CONF_SITE_NAME: site["name"],
+                        CONF_SITE_NAME: site.site_name,
                     },
                 )
             errors["base"] = "unknown"
 
-        options = [{"value": s["site_id"], "label": s["label"]} for s in self._sites]
+        options = [
+            {"value": s.site_id, "label": _format_site_label(s)} for s in self._sites
+        ]
 
         return self.async_show_form(
             step_id="select_site",

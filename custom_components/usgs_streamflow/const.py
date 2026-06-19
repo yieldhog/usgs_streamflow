@@ -1,5 +1,7 @@
 """Constants for the USGS Streamflow integration."""
 
+import re
+
 DOMAIN = "usgs_streamflow"
 
 CONF_SITE_ID = "site_id"
@@ -56,3 +58,22 @@ SUPPORTED_PARAMETERS: dict[str, str] = {
 
 USGS_IV_URL = "https://waterservices.usgs.gov/nwis/iv/"
 USGS_SITE_URL = "https://waterservices.usgs.gov/nwis/site/"
+
+# Shared site-number parsing.  Used by the config flow to validate user input and
+# by the client backends to decide between a direct site-number lookup and a
+# name search.  Kept here (rather than in config_flow or client) so both can
+# import it without a circular dependency.
+#
+# USGS site numbers are 6-15 digits: surface-water sites are typically 8, while
+# groundwater, combined-sewer, and other lat/long-based IDs run to 15.
+SITE_NUMBER_RE = re.compile(r"^\d{6,15}$")
+_AGENCY_PREFIX_RE = re.compile(r"^[A-Za-z]+-")
+
+
+def normalize_site_number(raw: str) -> str:
+    """Strip whitespace and an optional agency prefix (e.g. 'USGS-') from input.
+
+    WDFN monitoring-location pages display these IDs with a 'USGS-' prefix, so
+    we strip it before deciding whether the input is a site number.
+    """
+    return _AGENCY_PREFIX_RE.sub("", raw.strip())

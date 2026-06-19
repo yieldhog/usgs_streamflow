@@ -4,26 +4,31 @@ from __future__ import annotations
 import logging
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Any
-
-import aiohttp
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from .client import (
+    LatestResult,
+    LegacyClient,
+    UsgsClient,
+    UsgsCommunicationError,
+    UsgsHttpStatusError,
+    UsgsResponseFormatError,
+)
 from .const import (
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     HISTORY_RETENTION_MINUTES,
     SUPPORTED_PARAMETERS,
-    USGS_IV_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-FETCH_PARAMS = ",".join(SUPPORTED_PARAMETERS.keys())
+# Every supported parameter is requested each poll; the station's response tells
+# us which it actually has.
+FETCH_PARAM_LIST = list(SUPPORTED_PARAMETERS)
 
 # If the most recent USGS reading is older than this, the station is likely
 # seasonally shut down or decommissioned.
@@ -62,6 +67,7 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         site_id: str,
         site_name: str,
         update_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
+        client: UsgsClient | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -71,6 +77,9 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
         self.site_id = site_id
         self.site_name = site_name
+        # All USGS network access goes through this client.  Defaults to the
+        # legacy WaterServices backend; a later phase injects the modern one.
+        self._client: UsgsClient = client or LegacyClient(hass)
         # Accumulates which parameter codes this station genuinely has sensors
         # for, across all successful online fetches.  Populated from
         # result.reported_params (params with a non-empty value_list), NOT from
@@ -88,28 +97,21 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
 
     async def _async_update_data(self) -> CoordinatorData:
-        """Fetch latest readings from USGS NWIS."""
-        session = async_get_clientsession(self.hass)
-        params = {
-            "sites": self.site_id,
-            "parameterCd": FETCH_PARAMS,
-            "format": "json",
-        }
-
-        timeout = aiohttp.ClientTimeout(total=30)
+        """Fetch latest readings from USGS via the client and assemble data."""
         try:
-            async with session.get(USGS_IV_URL, params=params, timeout=timeout) as resp:
-                if resp.status != 200:
-                    raise UpdateFailed(
-                        f"USGS API returned HTTP {resp.status} for site {self.site_id}"
-                    )
-                data = await resp.json(content_type=None)
-        except UpdateFailed:
-            raise
-        except Exception as err:
+            latest = await self._client.get_latest_values(
+                self.site_id, FETCH_PARAM_LIST
+            )
+        except UsgsHttpStatusError as err:
+            raise UpdateFailed(
+                f"USGS API returned HTTP {err.status} for site {self.site_id}"
+            ) from err
+        except UsgsResponseFormatError as err:
+            raise UpdateFailed(f"Unexpected USGS response structure: {err}") from err
+        except UsgsCommunicationError as err:
             raise UpdateFailed(f"Error communicating with USGS API: {err}") from err
 
-        result = self._parse_response(data)
+        result = self._build_coordinator_data(latest)
 
         # Always update known_params when reported_params is non-empty.
         # Offline/seasonal status means the values are stale, but the station
@@ -159,19 +161,26 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         cutoff = newest - timedelta(minutes=window_minutes)
         return [(t, v) for (t, v) in buf if t >= cutoff]
 
-    def _parse_response(self, data: Any) -> CoordinatorData:
-        """Parse USGS NWIS JSON into a CoordinatorData object."""
-        values: dict[str, float | None] = {}
-        reading_times: dict[str, datetime | None] = {}
-        # Only params with a non-empty value_list — station has this sensor.
-        reported_params: set[str] = set()
+    def _build_coordinator_data(self, latest: LatestResult) -> CoordinatorData:
+        """Assemble a CoordinatorData from the client's latest-values result.
 
-        try:
-            time_series_list = data["value"]["timeSeries"]
-        except (KeyError, TypeError) as err:
-            raise UpdateFailed(f"Unexpected USGS response structure: {err}") from err
+        The client owns fetching and per-parameter parsing; offline detection
+        lives here so it stays backend-independent (the same time-age logic
+        applies whichever API answered).
+        """
+        # The station reports a parameter only when the client returned a
+        # reading for it (a non-empty value list), so the reading keys are the
+        # reported parameters.
+        reported_params: set[str] = set(latest.readings)
+        values: dict[str, float | None] = {
+            param_cd: reading.value for param_cd, reading in latest.readings.items()
+        }
+        reading_times: dict[str, datetime | None] = {
+            param_cd: reading.reading_time
+            for param_cd, reading in latest.readings.items()
+        }
 
-        if not time_series_list:
+        if not latest.station_reporting:
             # Station exists but reports no time series at all —
             # this happens when a gauge is seasonally discontinued.
             return CoordinatorData(
@@ -186,55 +195,11 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # datetime.utcnow() is deprecated in Python 3.12+ and returns a naive
         # datetime that cannot be safely compared against tz-aware values.
         now = dt_util.utcnow()
-        any_recent = False
-
-        for series in time_series_list:
-            try:
-                param_cd = series["variable"]["variableCode"][0]["value"]
-                value_list = series["values"][0]["value"]
-            except (KeyError, IndexError):
-                continue
-
-            if not value_list:
-                # USGS returned the series header but no data — this is how the
-                # API signals "this parameter was requested but does not exist
-                # at this station."  Skip entirely; do not add to reported_params
-                # or values so no phantom sensor is created for this param.
-                continue
-
-            # Station confirmed to have this sensor.
-            reported_params.add(param_cd)
-
-            last_entry = value_list[-1]
-            raw = last_entry.get("value")
-            dt_str = last_entry.get("dateTime")
-
-            # Parse reading timestamp
-            reading_dt: datetime | None = None
-            if dt_str:
-                try:
-                    # USGS timestamps are ISO-8601 with a UTC offset, e.g.
-                    # "2024-06-01T14:15:00.000-06:00".  fromisoformat produces a
-                    # tz-aware datetime, which we can compare directly against
-                    # dt_util.utcnow() without stripping tzinfo.
-                    reading_dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-                    if reading_dt.tzinfo is None:
-                        # Defensive: treat naive timestamps as UTC
-                        reading_dt = reading_dt.replace(tzinfo=dt_util.UTC)
-                    age_hours = (now - reading_dt).total_seconds() / 3600
-                    if age_hours < STALE_READING_HOURS:
-                        any_recent = True
-                except (ValueError, TypeError):
-                    pass
-
-            reading_times[param_cd] = reading_dt
-
-            try:
-                value = float(raw)
-                # USGS uses -999999 as a sentinel for missing/suppressed data
-                values[param_cd] = None if value == -999999.0 else value
-            except (ValueError, TypeError):
-                values[param_cd] = None
+        any_recent = any(
+            reading_dt is not None
+            and (now - reading_dt).total_seconds() / 3600 < STALE_READING_HOURS
+            for reading_dt in reading_times.values()
+        )
 
         # Determine offline status
         station_offline = False
