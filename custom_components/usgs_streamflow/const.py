@@ -53,6 +53,20 @@ PARAM_PH = "00400"                    # pH, standard units
 PARAM_TURBIDITY = "63680"             # Turbidity, FNU
 PARAM_PRECIPITATION = "00045"         # Precipitation, inches (incremental)
 PARAM_GW_DEPTH = "72019"              # Depth to water level, ft below land surface
+# Weather / atmospheric
+PARAM_AIR_TEMP = "00020"              # Air temperature, degrees Celsius
+PARAM_REL_HUMIDITY = "00052"          # Relative humidity, percent
+PARAM_WIND_SPEED = "00035"            # Wind speed, miles per hour
+PARAM_WIND_DIR = "00036"              # Wind direction, degrees clockwise from N
+# Extended water quality
+PARAM_SALINITY = "00480"              # Salinity, parts per thousand
+PARAM_NITRATE = "99133"              # Nitrate + nitrite, mg/L as nitrogen
+PARAM_CHLOROPHYLL = "32316"           # Chlorophyll relative fluorescence, RFU
+# Lake / reservoir & velocity
+PARAM_RESERVOIR_ELEV = "62614"        # Lake/reservoir water-surface elevation, ft
+PARAM_RESERVOIR_STORAGE = "00054"     # Reservoir storage, acre-feet
+PARAM_DISCHARGE_TIDAL = "72137"       # Discharge, tidally filtered, ft³/s
+PARAM_VELOCITY = "72255"              # Mean water velocity, ft/s
 
 # Ordered map of every parameter the integration understands -> short label.
 # Single source of truth for which codes are fetched (coordinator) and which
@@ -68,6 +82,17 @@ SUPPORTED_PARAMETERS: dict[str, str] = {
     PARAM_TURBIDITY: "Turbidity",
     PARAM_PRECIPITATION: "Precipitation",
     PARAM_GW_DEPTH: "Depth to Water Level",
+    PARAM_AIR_TEMP: "Air Temperature",
+    PARAM_REL_HUMIDITY: "Relative Humidity",
+    PARAM_WIND_SPEED: "Wind Speed",
+    PARAM_WIND_DIR: "Wind Direction",
+    PARAM_SALINITY: "Salinity",
+    PARAM_NITRATE: "Nitrate",
+    PARAM_CHLOROPHYLL: "Chlorophyll",
+    PARAM_RESERVOIR_ELEV: "Reservoir Elevation",
+    PARAM_RESERVOIR_STORAGE: "Reservoir Storage",
+    PARAM_DISCHARGE_TIDAL: "Discharge (Tidally Filtered)",
+    PARAM_VELOCITY: "Water Velocity",
 }
 
 USGS_IV_URL = "https://waterservices.usgs.gov/nwis/iv/"

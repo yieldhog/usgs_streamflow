@@ -9,7 +9,7 @@ A Home Assistant integration that pulls real-time data from the [USGS National W
 ## Features
 
 - **Search by name or site number** — find any active USGS monitoring location via the setup wizard, across all site types (not just streams)
-- **Up to 10 measurement sensors per site** — discharge, gauge height, water temperature, specific conductance, dissolved oxygen, % saturation, pH, turbidity, precipitation, and depth to water level — each created only where the site actually reports it
+- **Up to 21 measurement sensors per site** — streamflow & level (discharge, gauge height, tidally-filtered discharge, water velocity, depth to water level, reservoir elevation/storage), water quality (temperature, specific conductance, dissolved oxygen & % saturation, pH, turbidity, salinity, nitrate, chlorophyll), and weather (air temperature, relative humidity, wind speed/direction, precipitation) — each created only where the site actually reports it
 - **Station Status sensor** — shows `Active` or `Offline` so seasonal/winter shutdowns are handled cleanly
 - **Proper unavailability handling** — sensors mark as `Unavailable` (not `Unknown`) when a gauge is seasonally decommissioned
 - **Configurable poll interval** — defaults to 15 minutes (matching USGS update frequency); adjustable per site
@@ -88,6 +88,17 @@ Each configured site creates a device. A measurement sensor is created for each 
 | Turbidity | FNU | |
 | Precipitation | in | Incremental per reporting interval, not an accumulating total |
 | Depth to Water Level | ft | Below land surface (groundwater wells) |
+| Air Temperature | °C | |
+| Relative Humidity | % | |
+| Wind Speed | mph | |
+| Wind Direction | ° | Degrees clockwise from north |
+| Salinity | ppt | Parts per thousand |
+| Nitrate | mg/L | As nitrogen (nitrate + nitrite) |
+| Chlorophyll | RFU | Relative fluorescence |
+| Reservoir Elevation | ft | Water-surface elevation above datum |
+| Reservoir Storage | acre-ft | |
+| Discharge (Tidally Filtered) | ft³/s | Tidally filtered flow |
+| Water Velocity | ft/s | Mean velocity |
 | Station Status | — | `Active` or `Offline` |
 
 Sensors are created only for parameters a site actually reports — you won't get empty entities for measurements a site doesn't have. The Station Status entity stays active even when the site is offline for the season and includes an `offline_reason` attribute explaining why.
