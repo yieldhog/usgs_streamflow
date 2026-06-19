@@ -6,14 +6,17 @@ implements the :class:`UsgsClient` interface, so the rest of the integration
 answered.  This is the seam that lets us migrate from the legacy WaterServices
 API to the modern OGC API one file at a time, and run the two side by side.
 
-Phase A ships only :class:`LegacyClient`, which wraps today's WaterServices
-calls unchanged.  :class:`ModernClient` (OGC API) arrives in a later phase.
+:class:`LegacyClient` wraps today's WaterServices calls unchanged.
+:class:`ModernClient` talks to the modern OGC API and is the eventual target.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 import aiohttp
 
@@ -22,14 +25,55 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    DEMO_KEY,
     SITE_NUMBER_RE,
+    SUPPORTED_PARAMETERS,
     USGS_IV_URL,
     USGS_SITE_URL,
     normalize_site_number,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 # Network timeout for every USGS request, in seconds.
 _REQUEST_TIMEOUT = 30
+
+# USGS uses -999999 as a sentinel for missing/suppressed data.  Confirmed for
+# the legacy API; applied to the modern API too as a defensive parity measure
+# (whether the modern API emits it is unverified — see MIGRATION.md §7.3).
+_MISSING_VALUE_SENTINEL = -999999.0
+
+
+def _parse_iso_datetime(dt_str: Any) -> datetime | None:
+    """Parse an ISO-8601 / RFC 3339 timestamp into a tz-aware datetime.
+
+    USGS timestamps carry a UTC offset (e.g. "2024-06-01T14:15:00.000-06:00"
+    or "...Z"); the result is comparable directly against ``dt_util.utcnow()``.
+    Returns ``None`` for empty or unparseable values.  Shared by both backends.
+    """
+    if not dt_str:
+        return None
+    try:
+        parsed = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if parsed.tzinfo is None:
+        # Defensive: treat naive timestamps as UTC
+        parsed = parsed.replace(tzinfo=dt_util.UTC)
+    return parsed
+
+
+def _value_to_float(raw: Any) -> float | None:
+    """Convert a raw value to float, mapping the missing sentinel to None.
+
+    The modern API transmits values as strings to preserve precision; the legacy
+    API as numbers.  ``float()`` handles both.  Shared by both backends.
+    """
+    try:
+        value = float(raw)
+    except (ValueError, TypeError):
+        return None
+    return None if value == _MISSING_VALUE_SENTINEL else value
 
 
 # --------------------------------------------------------------------------- #
@@ -81,15 +125,19 @@ class SiteHit:
 class Reading:
     """The latest observed value for a single parameter at a site.
 
-    ``approval_status`` and ``qualifier`` are carried for forward compatibility
-    with the modern backend (which exposes them); the legacy backend leaves them
-    ``None`` and the current data model does not surface them.
+    Beyond ``value`` and ``reading_time``, the modern backend also populates the
+    metadata fields (approval status, qualifier, statistic id, time series id),
+    which the sensors surface as attributes.  The legacy backend leaves them
+    ``None`` (WaterServices does not provide them in the same shape), so they
+    simply don't appear on legacy entities.
     """
 
     value: float | None
     reading_time: datetime | None
     approval_status: str | None = None
     qualifier: str | None = None
+    statistic_id: str | None = None
+    time_series_id: str | None = None
 
 
 @dataclass
@@ -162,9 +210,6 @@ _FIPS_TO_STATE: dict[str, str] = {
     "56": "WY", "60": "AS", "66": "GU", "69": "MP", "72": "PR",
     "78": "VI",
 }
-
-# USGS uses -999999 as a sentinel for missing/suppressed data.
-_MISSING_VALUE_SENTINEL = -999999.0
 
 
 class LegacyClient:
@@ -323,40 +368,295 @@ class LegacyClient:
                 continue
 
             last_entry = value_list[-1]
-            reading_dt = LegacyClient._parse_reading_time(last_entry.get("dateTime"))
-            value = LegacyClient._parse_value(last_entry.get("value"))
-
             readings[param_cd] = Reading(
-                value=value,
-                reading_time=reading_dt,
+                value=_value_to_float(last_entry.get("value")),
+                reading_time=_parse_iso_datetime(last_entry.get("dateTime")),
                 approval_status=None,
                 qualifier=None,
             )
 
         return LatestResult(readings=readings, station_reporting=True)
 
-    @staticmethod
-    def _parse_reading_time(dt_str) -> datetime | None:
-        """Parse a USGS ISO-8601 timestamp into a tz-aware UTC-comparable dt."""
-        if not dt_str:
-            return None
-        try:
-            # USGS timestamps are ISO-8601 with a UTC offset, e.g.
-            # "2024-06-01T14:15:00.000-06:00".  fromisoformat produces a
-            # tz-aware datetime, comparable directly against dt_util.utcnow().
-            reading_dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            return None
-        if reading_dt.tzinfo is None:
-            # Defensive: treat naive timestamps as UTC
-            reading_dt = reading_dt.replace(tzinfo=dt_util.UTC)
-        return reading_dt
 
-    @staticmethod
-    def _parse_value(raw) -> float | None:
-        """Convert a raw USGS value to float, mapping the sentinel to None."""
+# --------------------------------------------------------------------------- #
+# Modern backend (USGS Water Data OGC API)
+# --------------------------------------------------------------------------- #
+# Base URL for the modern API.  Isolated here so the eventual v0 -> v1 move (or
+# any alpha churn) is a one-line edit (MIGRATION.md §4.1, §11).
+MODERN_BASE_URL = "https://api.waterdata.usgs.gov/ogcapi/v0"
+
+# Continuous / "IV-equivalent" series are identified in time-series-metadata by
+# this computation_period_identifier (MIGRATION.md §3.4).
+_CONTINUOUS_PERIOD = "Points"
+
+# CQL2 JSON request content type (MIGRATION.md §3.6).
+_CQL_CONTENT_TYPE = "application/query-cql-json"
+
+# Page size for item queries; sites have far fewer series than this, so a poll
+# is normally a single page.  We still follow ``next`` links defensively.
+_PAGE_LIMIT = 1000
+_MAX_PAGES = 50
+
+# 429 backoff: retry on rate-limit responses with exponential delay, honoring a
+# Retry-After header when present.  Only HTTP 429 and Retry-After are relied on
+# (both standard); the api.data.gov "remaining requests" header names are not
+# yet confirmed (MIGRATION.md §3.1), so they are not used for control flow.
+_MAX_429_RETRIES = 4
+_BACKOFF_BASE_SECONDS = 1.0
+
+
+def _strip_usgs_prefix(value: str) -> str:
+    """Strip a leading agency prefix (e.g. 'USGS-') from a location id."""
+    return normalize_site_number(value)
+
+
+def _next_link(envelope: dict) -> str | None:
+    """Return the ``next`` page href from an OGC FeatureCollection, if any."""
+    for link in envelope.get("links") or []:
+        if link.get("rel") == "next" and link.get("href"):
+            return link["href"]
+    return None
+
+
+class ModernClient:
+    """USGS client backed by the modern Water Data OGC API.
+
+    Implements the same :class:`UsgsClient` interface as :class:`LegacyClient`
+    so it is a drop-in replacement.  Authenticates with an api.data.gov key via
+    the ``X-Api-Key`` header and backs off on HTTP 429.
+    """
+
+    def __init__(self, hass: HomeAssistant, api_key: str | None = None) -> None:
+        self._hass = hass
+        # Empty key -> shared demo key (heavily rate-limited); warn once at setup.
+        self._api_key = api_key or DEMO_KEY
+        if not api_key:
+            _LOGGER.warning(
+                "No api.data.gov key configured; using the shared DEMO_KEY, "
+                "which is strictly rate-limited. Get a free key at "
+                "https://api.data.gov/signup/ and set it in the integration "
+                "options."
+            )
+
+    # -- HTTP plumbing ----------------------------------------------------- #
+    def _headers(self, *, cql: bool = False) -> dict[str, str]:
+        headers = {"X-Api-Key": self._api_key, "Accept": "application/json"}
+        if cql:
+            headers["Content-Type"] = _CQL_CONTENT_TYPE
+        return headers
+
+    async def _request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        cql_body: dict | None = None,
+    ) -> dict:
+        """Perform a request and return parsed JSON, retrying on HTTP 429."""
+        session = async_get_clientsession(self._hass)
+        timeout = aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT)
+        headers = self._headers(cql=cql_body is not None)
+        body = json.dumps(cql_body) if cql_body is not None else None
+
+        attempt = 0
+        while True:
+            retry_delay: float | None = None
+            try:
+                async with session.request(
+                    method,
+                    url,
+                    params=params,
+                    data=body,
+                    headers=headers,
+                    timeout=timeout,
+                ) as resp:
+                    if resp.status == 200:
+                        return await resp.json(content_type=None)
+                    if resp.status == 429 and attempt < _MAX_429_RETRIES:
+                        retry_delay = _retry_after_seconds(resp, attempt)
+                    else:
+                        raise UsgsHttpStatusError(resp.status)
+            except UsgsClientError:
+                raise
+            except Exception as err:  # noqa: BLE001 - normalize transport errors
+                raise UsgsCommunicationError(str(err)) from err
+
+            # Reached only for a retryable 429.
+            attempt += 1
+            await asyncio.sleep(retry_delay or 0.0)
+
+    async def _collect_features(
+        self, url: str, params: dict[str, str]
+    ) -> list[dict]:
+        """Fetch all features for an item query, following ``next`` links."""
+        features: list[dict] = []
+        next_url: str | None = url
+        next_params: dict[str, str] | None = params
+        pages = 0
+        while next_url and pages < _MAX_PAGES:
+            envelope = await self._request_json("GET", next_url, params=next_params)
+            page = envelope.get("features") or []
+            features.extend(page)
+            # ``next`` is a fully-qualified URL carrying its own query string.
+            next_url = _next_link(envelope)
+            next_params = None
+            pages += 1
+            if not page:
+                break
+        return features
+
+    # -- site search ------------------------------------------------------- #
+    async def search_sites(
+        self, term: str, *, state: str | None = None
+    ) -> list[SiteHit]:
+        """Search monitoring locations by exact site number or name substring.
+
+        Name search uses POST CQL2 ``like`` (uppercased — ``LIKE`` is
+        case-sensitive) scoped to ``agency_code = 'USGS'`` (MIGRATION.md §7.1).
+        The ``state`` argument is accepted but not applied server-side: the
+        ``state_code`` units are unconfirmed (§3.5), so we do not filter on it.
+        """
+        url = f"{MODERN_BASE_URL}/collections/monitoring-locations/items"
+        candidate = normalize_site_number(term)
+        if SITE_NUMBER_RE.match(candidate):
+            cql: dict = {
+                "op": "=",
+                "args": [{"property": "monitoring_location_number"}, candidate],
+            }
+        else:
+            cql = {
+                "op": "and",
+                "args": [
+                    {
+                        "op": "like",
+                        "args": [
+                            {"property": "monitoring_location_name"},
+                            f"%{term.strip().upper()}%",
+                        ],
+                    },
+                    {"op": "=", "args": [{"property": "agency_code"}, "USGS"]},
+                ],
+            }
+
+        envelope = await self._request_json(
+            "POST",
+            url,
+            params={"f": "json", "limit": str(_PAGE_LIMIT)},
+            cql_body=cql,
+        )
+
+        hits: list[SiteHit] = []
+        for feature in envelope.get("features") or []:
+            props = feature.get("properties") or {}
+            raw_id = (
+                props.get("monitoring_location_id")
+                or props.get("monitoring_location_number")
+                or ""
+            )
+            site_id = _strip_usgs_prefix(raw_id)
+            name = props.get("monitoring_location_name") or ""
+            if not site_id or not name:
+                continue
+            hits.append(
+                SiteHit(
+                    site_id=site_id,
+                    site_name=name,
+                    state=None,
+                    site_type=props.get("site_type"),
+                )
+            )
+            if len(hits) >= 50:
+                break
+        return hits
+
+    # -- capability gating ------------------------------------------------- #
+    async def get_site_parameters(self, site_id: str) -> set[str]:
+        """Return the supported parameter codes the site reports as continuous.
+
+        Reads time-series-metadata for the location and keeps series whose
+        ``computation_period_identifier`` is ``Points`` (MIGRATION.md §7.2),
+        intersected with the parameters this integration understands.
+        """
+        url = f"{MODERN_BASE_URL}/collections/time-series-metadata/items"
+        params = {
+            "monitoring_location_id": f"USGS-{site_id}",
+            "f": "json",
+            "limit": str(_PAGE_LIMIT),
+        }
+        features = await self._collect_features(url, params)
+
+        found: set[str] = set()
+        for feature in features:
+            props = feature.get("properties") or {}
+            if props.get("computation_period_identifier") != _CONTINUOUS_PERIOD:
+                continue
+            code = props.get("parameter_code")
+            if code in SUPPORTED_PARAMETERS:
+                found.add(code)
+        return found
+
+    # -- latest values poll ------------------------------------------------ #
+    async def get_latest_values(
+        self, site_id: str, params: list[str]
+    ) -> LatestResult:
+        """Fetch the latest continuous value for each requested parameter.
+
+        Queries latest-continuous for the location (URL-param equality on
+        ``monitoring_location_id`` is verified — §3.3) and keeps the requested
+        parameters.  When a parameter has more than one series, the most recent
+        observation wins.
+        """
+        wanted = set(params)
+        url = f"{MODERN_BASE_URL}/collections/latest-continuous/items"
+        request_params = {
+            "monitoring_location_id": f"USGS-{site_id}",
+            "f": "json",
+            "limit": str(_PAGE_LIMIT),
+        }
+        features = await self._collect_features(url, request_params)
+
+        readings: dict[str, Reading] = {}
+        for feature in features:
+            props = feature.get("properties") or {}
+            param_cd = props.get("parameter_code")
+            if param_cd not in wanted:
+                continue
+            reading_dt = _parse_iso_datetime(props.get("time"))
+            existing = readings.get(param_cd)
+            if existing is not None and not _is_newer(
+                reading_dt, existing.reading_time
+            ):
+                continue
+            readings[param_cd] = Reading(
+                value=_value_to_float(props.get("value")),
+                reading_time=reading_dt,
+                approval_status=props.get("approval_status"),
+                qualifier=props.get("qualifier"),
+                statistic_id=props.get("statistic_id"),
+                time_series_id=props.get("time_series_id"),
+            )
+
+        # Any features at all means the station is reporting; an empty collection
+        # mirrors the legacy "no time series" signal for a discontinued gauge.
+        return LatestResult(readings=readings, station_reporting=bool(features))
+
+
+def _retry_after_seconds(resp, attempt: int) -> float:
+    """Delay before retrying a 429: Retry-After if given, else exponential."""
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after:
         try:
-            value = float(raw)
+            return max(0.0, float(retry_after))
         except (ValueError, TypeError):
-            return None
-        return None if value == _MISSING_VALUE_SENTINEL else value
+            pass
+    return _BACKOFF_BASE_SECONDS * (2 ** attempt)
+
+
+def _is_newer(new_dt: datetime | None, old_dt: datetime | None) -> bool:
+    """True if ``new_dt`` is strictly newer than ``old_dt`` (None = oldest)."""
+    if new_dt is None:
+        return False
+    if old_dt is None:
+        return True
+    return new_dt > old_dt

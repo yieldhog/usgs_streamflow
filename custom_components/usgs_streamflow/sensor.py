@@ -442,12 +442,18 @@ class USGSStreamSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntit
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         attrs: dict[str, Any] = {"usgs_site_id": self.coordinator.site_id}
-        if self.coordinator.data:
-            reading_dt = self.coordinator.data.reading_times.get(
-                self.entity_description.param_cd
-            )
+        data = self.coordinator.data
+        if data:
+            param_cd = self.entity_description.param_cd
+            reading_dt = data.reading_times.get(param_cd)
             if reading_dt:
                 attrs["last_reading_time"] = reading_dt.isoformat()
+            # Per-reading metadata from the modern backend (approval status,
+            # qualifier, statistic / time-series id).  Absent on legacy, where
+            # these are None, so nothing extra appears there.
+            for key, val in data.reading_attrs.get(param_cd, {}).items():
+                if val is not None:
+                    attrs[key] = val
         return attrs
 
 

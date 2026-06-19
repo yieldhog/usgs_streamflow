@@ -45,6 +45,7 @@ class CoordinatorData:
         station_offline: bool,
         offline_reason: str | None,
         reported_params: set[str],
+        reading_attrs: dict[str, dict[str, str | None]] | None = None,
     ) -> None:
         self.values = values                    # param_cd -> float | None
         self.reading_times = reading_times      # param_cd -> datetime of last value
@@ -56,6 +57,11 @@ class CoordinatorData:
         # USGS returns the timeSeries header with an empty value_list rather
         # than omitting the entry entirely.  An empty value_list = no sensor.
         self.reported_params = reported_params
+        # Per-parameter metadata the sensors expose as attributes (approval
+        # status, qualifier, statistic / time-series id).  Populated by the
+        # modern backend; the legacy backend leaves the values None, so nothing
+        # extra appears on legacy entities.
+        self.reading_attrs = reading_attrs or {}
 
 
 class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -182,6 +188,17 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
             param_cd: reading.reading_time
             for param_cd, reading in latest.readings.items()
         }
+        # Optional per-parameter metadata for sensor attributes; all-None on the
+        # legacy backend (so nothing extra surfaces there).
+        reading_attrs: dict[str, dict[str, str | None]] = {
+            param_cd: {
+                "approval_status": reading.approval_status,
+                "qualifier": reading.qualifier,
+                "statistic_id": reading.statistic_id,
+                "time_series_id": reading.time_series_id,
+            }
+            for param_cd, reading in latest.readings.items()
+        }
 
         if not latest.station_reporting:
             # Station exists but reports no time series at all —
@@ -229,4 +246,5 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
             station_offline=station_offline,
             offline_reason=offline_reason,
             reported_params=reported_params,
+            reading_attrs=reading_attrs,
         )
