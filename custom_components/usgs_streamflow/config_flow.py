@@ -43,6 +43,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 USGS_WATER_DATA_URL = "https://waterdata.usgs.gov/nwis/rt"
+# Where users obtain an api.data.gov key.  Passed as a description placeholder
+# (hassfest forbids literal URLs in translation strings).
+API_SIGNUP_URL = "https://api.data.gov/signup/"
 
 
 def _format_site_label(site: SiteHit) -> str:
@@ -175,7 +178,10 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-            description_placeholders={"count": str(len(self._sites))},
+            description_placeholders={
+                "count": str(len(self._sites)),
+                "signup_url": API_SIGNUP_URL,
+            },
         )
 
 
@@ -257,5 +263,7 @@ class USGSStreamflowOptionsFlow(config_entries.OptionsFlow):
             )
 
         return self.async_show_form(
-            step_id="init", data_schema=vol.Schema(fields)
+            step_id="init",
+            data_schema=vol.Schema(fields),
+            description_placeholders={"signup_url": API_SIGNUP_URL},
         )
