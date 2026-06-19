@@ -68,6 +68,7 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         site_name: str,
         update_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
         client: UsgsClient | None = None,
+        api_key: str | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -79,7 +80,9 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.site_name = site_name
         # All USGS network access goes through this client.  Defaults to the
         # legacy WaterServices backend; a later phase injects the modern one.
-        self._client: UsgsClient = client or LegacyClient(hass)
+        # The API key is passed to the default client but ignored by the legacy
+        # backend (it only matters for the modern one).
+        self._client: UsgsClient = client or LegacyClient(hass, api_key=api_key)
         # Accumulates which parameter codes this station genuinely has sensors
         # for, across all successful online fetches.  Populated from
         # result.reported_params (params with a non-empty value_list), NOT from

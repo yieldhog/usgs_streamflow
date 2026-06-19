@@ -5,6 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_API_KEY,
     CONF_SCAN_INTERVAL,
     CONF_SITE_ID,
     CONF_SITE_NAME,
@@ -21,12 +22,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     interval = int(
         entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     )
+    # Per-entry api.data.gov key for the modern backend; ignored by legacy.
+    api_key = entry.options.get(CONF_API_KEY, "")
 
     coordinator = USGSStreamflowCoordinator(
         hass,
         site_id=entry.data[CONF_SITE_ID],
         site_name=entry.data[CONF_SITE_NAME],
         update_interval_minutes=interval,
+        api_key=api_key,
     )
 
     await coordinator.async_config_entry_first_refresh()

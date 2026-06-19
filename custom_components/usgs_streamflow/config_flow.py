@@ -23,6 +23,7 @@ from homeassistant.helpers.selector import (
 
 from .client import LegacyClient, SiteHit
 from .const import (
+    CONF_API_KEY,
     CONF_ENABLED_PARAMETERS,
     CONF_SCAN_INTERVAL,
     CONF_SITE_ID,
@@ -64,6 +65,18 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._sites: list[SiteHit] = []
+
+    def _existing_api_key(self) -> str:
+        """Return an api.data.gov key from any existing entry, for pre-fill.
+
+        Lets a user who already configured one gauge avoid re-typing the key
+        for each additional gauge.
+        """
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            key = entry.options.get(CONF_API_KEY) or entry.data.get(CONF_API_KEY)
+            if key:
+                return key
+        return ""
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -121,6 +134,7 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             site_id = user_input["site_id"]
+            api_key = user_input.get(CONF_API_KEY, "").strip()
             site = next((s for s in self._sites if s.site_id == site_id), None)
             if site:
                 await self.async_set_unique_id(f"usgs_{site_id}")
@@ -131,6 +145,8 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_SITE_ID: site_id,
                         CONF_SITE_NAME: site.site_name,
                     },
+                    # Key lives in options so the options flow can edit it later.
+                    options={CONF_API_KEY: api_key},
                 )
             errors["base"] = "unknown"
 
@@ -147,7 +163,12 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             options=options,
                             mode=SelectSelectorMode.LIST,
                         )
-                    )
+                    ),
+                    vol.Optional(
+                        CONF_API_KEY, default=self._existing_api_key()
+                    ): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
                 }
             ),
             errors=errors,
@@ -168,6 +189,12 @@ class USGSStreamflowOptionsFlow(config_entries.OptionsFlow):
         options = self.config_entry.options
         schema = vol.Schema(
             {
+                vol.Optional(
+                    CONF_API_KEY,
+                    default=options.get(CONF_API_KEY, ""),
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
                 vol.Optional(
                     CONF_SCAN_INTERVAL,
                     default=options.get(

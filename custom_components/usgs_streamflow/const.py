@@ -10,6 +10,14 @@ CONF_SITE_NAME = "site_name"
 # Options (set via the integration's Configure / options flow)
 CONF_SCAN_INTERVAL = "scan_interval_minutes"
 CONF_ENABLED_PARAMETERS = "enabled_parameters"
+# api.data.gov key for the modernized USGS Water Data (OGC) API.  Stored per
+# entry so each gauge can carry its own key; the legacy backend ignores it.
+CONF_API_KEY = "api_key"
+
+# Shared low-volume key issued by api.data.gov.  Used as a fallback when the
+# user leaves the key blank, so the modern backend still works for light use
+# (subject to a strict rate limit).  The legacy backend never uses this.
+DEMO_KEY = "DEMO_KEY"
 
 # Polling cadence.  USGS instantaneous-values data typically refreshes about
 # every 15 minutes, so polling faster just adds load without yielding new data.

@@ -17,7 +17,11 @@
         "title": "Select a Gauge Station",
         "description": "Found {count} matching stations. Stations may show as Unavailable in winter if seasonally decommissioned.",
         "data": {
-          "site_id": "Station"
+          "site_id": "Station",
+          "api_key": "API key (optional)"
+        },
+        "data_description": {
+          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. The current data source doesn't require it — leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at https://api.data.gov/signup/."
         }
       }
     },
@@ -38,10 +42,12 @@
         "title": "USGS Streamflow Options",
         "description": "Adjust how often data is polled and which measurements appear as sensors. Only parameters the station actually reports will create sensors.",
         "data": {
+          "api_key": "API key (optional)",
           "scan_interval_minutes": "Update interval (minutes)",
           "enabled_parameters": "Parameters to show"
         },
         "data_description": {
+          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. Leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at https://api.data.gov/signup/. Changing this reloads the integration.",
           "scan_interval_minutes": "How often to poll USGS. Instantaneous data refreshes about every 15 minutes, so lower values add load without new data.",
           "enabled_parameters": "Unchecked parameters won't create sensors even if the station reports them. Changing this reloads the integration."
         }

@@ -174,8 +174,13 @@ class LegacyClient:
     abstraction existed, so behavior is unchanged.
     """
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(self, hass: HomeAssistant, api_key: str | None = None) -> None:
         self._hass = hass
+        # WaterServices is unauthenticated, so the api.data.gov key is accepted
+        # for a uniform constructor signature but deliberately unused here — it
+        # is plumbed through only for the modern backend.  Keeping it off the
+        # legacy request path guarantees legacy polling is unchanged.
+        self._api_key = api_key
 
     # -- site search ------------------------------------------------------- #
     async def search_sites(
