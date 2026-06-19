@@ -23,7 +23,10 @@ from homeassistant.helpers.selector import (
 
 from .client import LegacyClient, SiteHit
 from .const import (
+    BACKEND_LEGACY,
+    BACKEND_MODERN,
     CONF_API_KEY,
+    CONF_BACKEND,
     CONF_ENABLED_PARAMETERS,
     CONF_SCAN_INTERVAL,
     CONF_SITE_ID,
@@ -184,46 +187,75 @@ class USGSStreamflowOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.FlowResult:
         """Manage the integration options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # Merge over existing options so a field not shown in this form
+            # (e.g. the advanced backend selector when Advanced Mode is off) is
+            # preserved rather than dropped.
+            new_options = {**self.config_entry.options, **user_input}
+            return self.async_create_entry(title="", data=new_options)
 
         options = self.config_entry.options
-        schema = vol.Schema(
-            {
-                vol.Optional(
-                    CONF_API_KEY,
-                    default=options.get(CONF_API_KEY, ""),
-                ): TextSelector(
-                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+        fields: dict[Any, Any] = {
+            vol.Optional(
+                CONF_API_KEY,
+                default=options.get(CONF_API_KEY, ""),
+            ): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
+            vol.Optional(
+                CONF_SCAN_INTERVAL,
+                default=options.get(
+                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
                 ),
-                vol.Optional(
-                    CONF_SCAN_INTERVAL,
-                    default=options.get(
-                        CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
-                    ),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_SCAN_INTERVAL_MINUTES,
-                        max=MAX_SCAN_INTERVAL_MINUTES,
-                        step=1,
-                        mode=NumberSelectorMode.BOX,
-                        unit_of_measurement="min",
-                    )
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=MIN_SCAN_INTERVAL_MINUTES,
+                    max=MAX_SCAN_INTERVAL_MINUTES,
+                    step=1,
+                    mode=NumberSelectorMode.BOX,
+                    unit_of_measurement="min",
+                )
+            ),
+            vol.Optional(
+                CONF_ENABLED_PARAMETERS,
+                default=options.get(
+                    CONF_ENABLED_PARAMETERS, list(SUPPORTED_PARAMETERS)
                 ),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=code, label=label)
+                        for code, label in SUPPORTED_PARAMETERS.items()
+                    ],
+                    multiple=True,
+                    mode=SelectSelectorMode.LIST,
+                )
+            ),
+        }
+
+        # API backend is an advanced choice (the modern API is still alpha), so
+        # only expose it when Home Assistant Advanced Mode is enabled.
+        if self.show_advanced_options:
+            fields[
                 vol.Optional(
-                    CONF_ENABLED_PARAMETERS,
-                    default=options.get(
-                        CONF_ENABLED_PARAMETERS, list(SUPPORTED_PARAMETERS)
-                    ),
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[
-                            SelectOptionDict(value=code, label=label)
-                            for code, label in SUPPORTED_PARAMETERS.items()
-                        ],
-                        multiple=True,
-                        mode=SelectSelectorMode.LIST,
-                    )
-                ),
-            }
+                    CONF_BACKEND,
+                    default=options.get(CONF_BACKEND, BACKEND_LEGACY),
+                )
+            ] = SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(
+                            value=BACKEND_LEGACY,
+                            label="Legacy — WaterServices (current, stable)",
+                        ),
+                        SelectOptionDict(
+                            value=BACKEND_MODERN,
+                            label="Modern — Water Data OGC API (beta)",
+                        ),
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        return self.async_show_form(
+            step_id="init", data_schema=vol.Schema(fields)
         )
-        return self.async_show_form(step_id="init", data_schema=schema)

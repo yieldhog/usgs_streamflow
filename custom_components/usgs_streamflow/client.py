@@ -25,6 +25,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    BACKEND_MODERN,
     DEMO_KEY,
     SITE_NUMBER_RE,
     SUPPORTED_PARAMETERS,
@@ -660,3 +661,20 @@ def _is_newer(new_dt: datetime | None, old_dt: datetime | None) -> bool:
     if old_dt is None:
         return True
     return new_dt > old_dt
+
+
+# --------------------------------------------------------------------------- #
+# Backend selection
+# --------------------------------------------------------------------------- #
+def build_client(
+    hass: HomeAssistant, *, backend: str, api_key: str | None = None
+) -> UsgsClient:
+    """Construct the client for the configured backend.
+
+    Defaults to the legacy backend for any value other than the modern one, so
+    an unknown/missing setting can never accidentally route an entry onto the
+    alpha API.
+    """
+    if backend == BACKEND_MODERN:
+        return ModernClient(hass, api_key=api_key)
+    return LegacyClient(hass, api_key=api_key)

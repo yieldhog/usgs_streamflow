@@ -19,6 +19,12 @@ CONF_API_KEY = "api_key"
 # (subject to a strict rate limit).  The legacy backend never uses this.
 DEMO_KEY = "DEMO_KEY"
 
+# Which API backend a config entry polls.  Advanced per-entry option; defaults
+# to legacy so existing entries are unaffected until explicitly switched.
+CONF_BACKEND = "backend"
+BACKEND_LEGACY = "legacy"
+BACKEND_MODERN = "modern"
+
 # Polling cadence.  USGS instantaneous-values data typically refreshes about
 # every 15 minutes, so polling faster just adds load without yielding new data.
 DEFAULT_SCAN_INTERVAL_MINUTES = 15

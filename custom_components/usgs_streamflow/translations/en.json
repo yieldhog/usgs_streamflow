@@ -44,12 +44,14 @@
         "data": {
           "api_key": "API key (optional)",
           "scan_interval_minutes": "Update interval (minutes)",
-          "enabled_parameters": "Parameters to show"
+          "enabled_parameters": "Parameters to show",
+          "backend": "Data source (advanced)"
         },
         "data_description": {
           "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. Leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at https://api.data.gov/signup/. Changing this reloads the integration.",
           "scan_interval_minutes": "How often to poll USGS. Instantaneous data refreshes about every 15 minutes, so lower values add load without new data.",
-          "enabled_parameters": "Unchecked parameters won't create sensors even if the station reports them. Changing this reloads the integration."
+          "enabled_parameters": "Unchecked parameters won't create sensors even if the station reports them. Changing this reloads the integration.",
+          "backend": "Which USGS API to poll. Legacy (WaterServices) is the stable default; Modern (Water Data OGC API) is the in-progress replacement and needs an API key. Switch one entry to Modern to compare it against Legacy. Changing this reloads the integration."
         }
       }
     }

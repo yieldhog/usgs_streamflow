@@ -4,8 +4,11 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .client import build_client
 from .const import (
+    BACKEND_LEGACY,
     CONF_API_KEY,
+    CONF_BACKEND,
     CONF_SCAN_INTERVAL,
     CONF_SITE_ID,
     CONF_SITE_NAME,
@@ -24,13 +27,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     # Per-entry api.data.gov key for the modern backend; ignored by legacy.
     api_key = entry.options.get(CONF_API_KEY, "")
+    # Which API backend this entry polls (defaults to legacy).  Changing it in
+    # the options flow reloads the entry, which rebuilds the client here.
+    backend = entry.options.get(CONF_BACKEND, BACKEND_LEGACY)
+    client = build_client(hass, backend=backend, api_key=api_key)
 
     coordinator = USGSStreamflowCoordinator(
         hass,
         site_id=entry.data[CONF_SITE_ID],
         site_name=entry.data[CONF_SITE_NAME],
         update_interval_minutes=interval,
-        api_key=api_key,
+        client=client,
     )
 
     await coordinator.async_config_entry_first_refresh()
