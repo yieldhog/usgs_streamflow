@@ -13,10 +13,10 @@ dialog/card.
 | `04-name-and-assign.png` | "Name and assign" — device created (21 entities) | Setup |
 | `05-device-sensors.png` | Device page with all sensors (Willamette R. at Portland) | Hero |
 
-## Nice-to-have (not yet captured)
+| `06-options.png` | Configure/Options dialog (with **Advanced Mode** on, so the **Data source** selector shows) | Configuration |
+
+## Optional (not planned)
 
 | Suggested filename | Shows |
 |--------------------|-------|
-| `06-options.png` | Configure/Options dialog with **Advanced Mode** on, so the **Data source** (Legacy/Modern) selector is visible |
-| `07-dashboard.png` | A Lovelace card (history-graph or gauge) of gauge height + its Trend sensor |
 | `08-offline-status.png` | Station Status `Offline` with an `offline_reason` (a seasonal gauge) |

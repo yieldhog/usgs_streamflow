@@ -149,6 +149,10 @@ After adding a site, click **Configure** on the entry to adjust:
 | **API key** *(optional)* | An [api.data.gov](https://api.data.gov/signup/) key for the **Modern** backend. Leave blank to fall back to a shared, rate-limited demo key. The default (legacy) backend ignores it. Pre-filled from another entry if you've already set one. |
 | **Data source** *(advanced)* | **Legacy** (WaterServices — stable default) or **Modern** (Water Data OGC API). Only shown when Home Assistant **Advanced Mode** is enabled in your user profile. |
 
+<p align="center">
+  <img src="images/06-options.png" alt="The integration's options dialog: interval, parameters, API key, and data-source selector" width="520">
+</p>
+
 Changing any option **reloads** that entry.
 
 ## Sensors
