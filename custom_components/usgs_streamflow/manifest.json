@@ -9,5 +9,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/yieldhog/usgs_streamflow/issues",
   "requirements": [],
-  "version": "1.2.0b3"
+  "version": "1.2.0"
 }
