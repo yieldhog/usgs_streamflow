@@ -1,19 +1,22 @@
 # README screenshots
 
-Drop captured screenshots here, named exactly as below, then commit. I'll view
-each one, write captions, and place them in the main `README.md`.
+Screenshots used by the main `README.md`. PNG, light theme, cropped to the
+dialog/card.
 
-PNG, light theme, cropped tight to the dialog/card, ~700–900px wide.
+## Captured (referenced in README)
 
-| Filename | What to capture | Priority |
-|----------|-----------------|----------|
-| `01-dashboard.png` | A Lovelace card (history-graph or gauge) showing e.g. Gauge Height + its Trend sensor | ⭐ hero shot |
-| `02-setup-search.png` | Add Integration → the search step (name + state code) | high |
-| `03-setup-results.png` | The results / select-a-station list (with the API key field) | high |
-| `04-device-sensors.png` | A device page for a multi-parameter site (e.g. Willamette `14211720`) showing many sensors | high |
-| `05-options.png` | The Configure/Options dialog — with **Advanced Mode** on so the **Data source** selector shows | high |
-| `06-attributes.png` | A sensor's attributes (`last_reading_time`; on Modern also `approval_status`, etc.) | medium |
-| `07-offline-status.png` | Station Status = `Offline` with an `offline_reason` (a seasonal gauge) | optional |
+| Filename | Shows | Used as |
+|----------|-------|---------|
+| `01-search-by-name.png` | Search step — stream name + state code | Setup |
+| `02-search-by-number.png` | Search step — by site number (kept for reference; not embedded) | — |
+| `03-select-station.png` | Select-a-station list + API key field | Setup |
+| `04-name-and-assign.png` | "Name and assign" — device created (21 entities) | Setup |
+| `05-device-sensors.png` | Device page with all sensors (Willamette R. at Portland) | Hero |
 
-Capture what you can — even 2–3 (dashboard + setup + device) make a big
-difference. Partial sets are fine; I'll place whatever's here.
+## Nice-to-have (not yet captured)
+
+| Suggested filename | Shows |
+|--------------------|-------|
+| `06-options.png` | Configure/Options dialog with **Advanced Mode** on, so the **Data source** (Legacy/Modern) selector is visible |
+| `07-dashboard.png` | A Lovelace card (history-graph or gauge) of gauge height + its Trend sensor |
+| `08-offline-status.png` | Station Status `Offline` with an `offline_reason` (a seasonal gauge) |

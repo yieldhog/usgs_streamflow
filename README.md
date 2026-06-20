@@ -18,6 +18,16 @@ No account or API key is required for the default data source. An optional
 **Modern** backend (the new USGS Water Data OGC API) is available per site for
 those who want to opt in early — see [Data sources](#data-sources).
 
+<p align="center">
+  <img src="images/05-device-sensors.png" alt="A USGS gauge as a Home Assistant device showing many sensors" width="900">
+  <br><em>One gauge → one device, with a sensor per reported parameter. Here the
+  tidal Willamette River at Portland shows discharge, tidally-filtered discharge,
+  gauge height, water-quality readings, water velocity, and the built-in rate &amp;
+  trend sensors — with a live trend feed on the right. (Instantaneous discharge
+  goes negative on the incoming tide, which is exactly why the tidally-filtered
+  value is also reported.)</em>
+</p>
+
 ---
 
 ## Contents
@@ -116,6 +126,15 @@ hidden from the normal update flow, so you opt in explicitly.
 4. Pick your site from the results list. *(Optionally set an API key here — see
    [Data sources](#data-sources). You can also add it later in Options.)*
 5. Repeat to add more sites.
+
+<p align="center">
+  <img src="images/01-search-by-name.png" alt="Search step: stream name plus state code" width="300">
+  <img src="images/03-select-station.png" alt="Select the matching station and optionally add an API key" width="300">
+  <img src="images/04-name-and-assign.png" alt="The gauge is added as a Home Assistant device" width="300">
+</p>
+
+<p align="center"><em>Search by name + state (or paste a site number) → pick the
+station and optionally add an api.data.gov key → it's added as a device.</em></p>
 
 Each site becomes its own **device**; its sensors are grouped under it.
 
