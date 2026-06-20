@@ -150,7 +150,9 @@ After adding a site, click **Configure** on the entry to adjust:
 | **Data source** *(advanced)* | **Legacy** (WaterServices — stable default) or **Modern** (Water Data OGC API). Only shown when Home Assistant **Advanced Mode** is enabled in your user profile. |
 
 <p align="center">
-  <img src="images/06-options.png" alt="The integration's options dialog: interval, parameters, API key, and data-source selector" width="520">
+  <img src="images/06-options.png" alt="Options dialog: parameter selection and the advanced Data source selector" width="480">
+  <br><em>Per-site options — pick which parameters become sensors, and (with Advanced
+  Mode) switch the <strong>Data source</strong> between Legacy and Modern.</em>
 </p>
 
 Changing any option **reloads** that entry.
