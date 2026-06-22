@@ -55,6 +55,16 @@ from .const import (
     SUPPORTED_PARAMETERS,
 )
 from .coordinator import USGSStreamflowCoordinator
+from .stats_coordinator import USGSStatsCoordinator
+from .streamflow_stats import (
+    CONDITION_ABOVE,
+    CONDITION_BELOW,
+    CONDITION_MUCH_ABOVE,
+    CONDITION_MUCH_BELOW,
+    CONDITION_NORMAL,
+    CONDITION_ORDER,
+    StatsResult,
+)
 
 # CFS (cubic feet per second) is not yet a named HA unit constant; use the
 # canonical string directly.  HA will store/display it correctly; unit
@@ -71,6 +81,15 @@ _TREND_ICONS = {
     "rising": "mdi:trending-up",
     "falling": "mdi:trending-down",
     "steady": "mdi:trending-neutral",
+}
+
+# Icons for the Condition sensor, one per WaterWatch class.
+_CONDITION_ICONS = {
+    CONDITION_MUCH_BELOW: "mdi:water-alert",
+    CONDITION_BELOW: "mdi:water-minus",
+    CONDITION_NORMAL: "mdi:water-check",
+    CONDITION_ABOVE: "mdi:water-plus",
+    CONDITION_MUCH_ABOVE: "mdi:water-alert",
 }
 
 
@@ -417,7 +436,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up USGS Streamflow sensors for a config entry."""
-    coordinator: USGSStreamflowCoordinator = hass.data[DOMAIN][entry.entry_id]
+    store = hass.data[DOMAIN][entry.entry_id]
+    coordinator: USGSStreamflowCoordinator = store["coordinator"]
+    stats_coordinator: USGSStatsCoordinator | None = store["stats"]
 
     entities: list[SensorEntity] = [
         # Station Status is always present so users can see online/offline
@@ -462,6 +483,25 @@ async def async_setup_entry(
         if cfg.param_cd in params_to_create and cfg.param_cd in enabled:
             entities.append(USGSRateSensor(coordinator, entry, cfg))
             entities.append(USGSTrendSensor(coordinator, entry, cfg))
+
+    # Percent-of-normal / condition sensors (opt-in).  The stats coordinator is
+    # present only when the feature is enabled, and its ``params`` are already
+    # limited to the stats-eligible parameters this station serves.
+    if stats_coordinator is not None:
+        for param_cd in stats_coordinator.params:
+            if param_cd in params_to_create and param_cd in enabled:
+                label = SUPPORTED_PARAMETERS.get(param_cd, param_cd)
+                entities.append(
+                    USGSConditionSensor(stats_coordinator, entry, param_cd, label)
+                )
+                entities.append(
+                    USGSPercentileSensor(stats_coordinator, entry, param_cd, label)
+                )
+                entities.append(
+                    USGSPercentOfNormalSensor(
+                        stats_coordinator, entry, param_cd, label
+                    )
+                )
 
     async_add_entities(entities)
 
@@ -688,3 +728,120 @@ class USGSTrendSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntity
         if rate is not None:
             attrs["rate_per_hour"] = round(rate, 4)
         return attrs
+
+
+class _USGSStatsSensorBase(
+    CoordinatorEntity[USGSStatsCoordinator], SensorEntity
+):
+    """Shared base for the percent-of-normal / condition sensors.
+
+    All three read from the stats coordinator's per-parameter
+    :class:`StatsResult`, which compares the live reading to the gauge's
+    long-term day-of-year envelope.  An entity is unavailable until a result
+    exists for its parameter (no envelope yet, or no current value).
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: USGSStatsCoordinator,
+        entry: ConfigEntry,
+        param_cd: str,
+        label: str,
+        suffix: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._param_cd = param_cd
+        site_id = entry.data[CONF_SITE_ID]
+        site_name = entry.data[CONF_SITE_NAME]
+        self._attr_unique_id = f"usgs_{site_id}_{param_cd}_{suffix}"
+        self._attr_device_info = _make_device_info(site_id, site_name)
+
+    def _result(self) -> StatsResult | None:
+        data = self.coordinator.data
+        if not data:
+            return None
+        return data.get(self._param_cd)
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._result() is not None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs: dict[str, Any] = {"usgs_site_id": self.coordinator.site_id}
+        result = self._result()
+        envelope = self.coordinator.envelopes.get(self._param_cd)
+        if result is not None:
+            attrs["percentile"] = result.percentile
+            attrs["percent_of_normal"] = result.percent_of_normal
+            attrs["condition"] = result.condition
+            attrs["median"] = round(result.median, 2)
+            attrs["sample_count"] = result.sample_count
+            attrs["observation_date"] = result.observation_date
+            attrs["inverted"] = result.inverted
+        if envelope is not None:
+            attrs["record_years"] = envelope.years
+            attrs["record_start"] = envelope.record_start
+            attrs["record_end"] = envelope.record_end
+        return attrs
+
+
+class USGSConditionSensor(_USGSStatsSensorBase):
+    """WaterWatch-style condition class for a parameter (e.g. 'Below normal')."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = list(CONDITION_ORDER)
+
+    def __init__(self, coordinator, entry, param_cd, label) -> None:
+        super().__init__(coordinator, entry, param_cd, label, "condition")
+        self._attr_name = f"{label} Condition"
+
+    @property
+    def native_value(self) -> str | None:
+        result = self._result()
+        return result.condition if result else None
+
+    @property
+    def icon(self) -> str:
+        result = self._result()
+        if result is None:
+            return "mdi:water-percent"
+        return _CONDITION_ICONS.get(result.condition, "mdi:water-percent")
+
+
+class USGSPercentileSensor(_USGSStatsSensorBase):
+    """The reading's percentile within its day's historical range (0-100)."""
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:sort-numeric-ascending"
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator, entry, param_cd, label) -> None:
+        super().__init__(coordinator, entry, param_cd, label, "percentile")
+        self._attr_name = f"{label} Percentile"
+
+    @property
+    def native_value(self) -> float | None:
+        result = self._result()
+        return result.percentile if result else None
+
+
+class USGSPercentOfNormalSensor(_USGSStatsSensorBase):
+    """The reading as a percentage of its day's historical median."""
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:water-percent"
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator, entry, param_cd, label) -> None:
+        super().__init__(coordinator, entry, param_cd, label, "pct_of_normal")
+        self._attr_name = f"{label} % of Normal"
+
+    @property
+    def native_value(self) -> float | None:
+        result = self._result()
+        return result.percent_of_normal if result else None

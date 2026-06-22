@@ -154,11 +154,35 @@ class _SensorEntityDescription:
 
 
 class _Coordinatorish:
+    data = None
+
     def __init__(self, *args, **kwargs) -> None:
         self.hass = args[0] if args else kwargs.get("hass")
 
     def __class_getitem__(cls, item):
         return cls
+
+    def async_add_listener(self, update_callback, context=None):
+        return lambda: None
+
+    def async_set_updated_data(self, data):
+        self.data = data
+
+    async def async_refresh(self):
+        return None
+
+
+class _Store:
+    """Minimal homeassistant.helpers.storage.Store stand-in (in-memory)."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        self._data = None
+
+    async def async_load(self):
+        return self._data
+
+    async def async_save(self, data) -> None:
+        self._data = data
 
 
 _INSTALLED = False
@@ -187,11 +211,20 @@ def install_stubs() -> None:
     ha = mod("homeassistant")
     mod("homeassistant.core", HomeAssistant=type("HomeAssistant", (), {}), callback=lambda f: f)
 
+    def _parse_datetime(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
     util = mod("homeassistant.util")
     util.dt = mod(
         "homeassistant.util.dt",
         utcnow=lambda: _state["now"],
         UTC=timezone.utc,
+        parse_datetime=_parse_datetime,
     )
 
     helpers = mod("homeassistant.helpers")
@@ -213,7 +246,9 @@ def install_stubs() -> None:
     helpers.entity_platform = mod(
         "homeassistant.helpers.entity_platform", AddEntitiesCallback=object
     )
+    helpers.storage = mod("homeassistant.helpers.storage", Store=_Store)
     selector_names = [
+        "BooleanSelector",
         "NumberSelector", "NumberSelectorConfig", "NumberSelectorMode",
         "SelectOptionDict", "SelectSelector", "SelectSelectorConfig",
         "SelectSelectorMode", "TextSelector", "TextSelectorConfig", "TextSelectorType",

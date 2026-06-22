@@ -40,6 +40,7 @@ those who want to opt in early — see [Data sources](#data-sources).
 - [Sensors](#sensors)
   - [Measurement sensors](#measurement-sensors)
   - [Rate & trend sensors](#rate--trend-sensors)
+  - [Condition & percent-of-normal sensors](#condition--percent-of-normal-sensors)
   - [Station Status](#station-status)
   - [Entity attributes](#entity-attributes)
 - [Data sources](#data-sources)
@@ -67,6 +68,9 @@ those who want to opt in early — see [Data sources](#data-sources).
     direction, precipitation
 - **Built-in rate-of-change and trend sensors** for level/flow parameters
   (e.g. gauge-height rise in ft/hr and a Rising / Falling / Steady trend).
+- **Opt-in percent-of-normal sensors** — Condition, Percentile, and % of Normal
+  for discharge and depth-to-water vs. ~30 years of daily history (the USGS
+  WaterWatch / Groundwater Watch view), with depth-to-water correctly inverted.
 - **Station Status sensor** — `Active` or `Offline`, with a reason, so seasonal
   and winter shutdowns are handled cleanly.
 - **No phantom entities** — a sensor is created only for a parameter the site
@@ -147,6 +151,7 @@ After adding a site, click **Configure** on the entry to adjust:
 | **Update interval** | How often to poll USGS, in minutes (minimum **15**). USGS instantaneous data refreshes about every 15 minutes, so polling faster adds load without new data. |
 | **Parameters to show** | Uncheck measurements you don't want as sensors. Unchecked parameters won't create sensors even if the site reports them. |
 | **API key** *(optional)* | An [api.data.gov](https://api.data.gov/signup/) key for the **Modern** backend. Leave blank to fall back to a shared, rate-limited demo key. The default (legacy) backend ignores it. Pre-filled from another entry if you've already set one. |
+| **Percent-of-normal sensors** *(opt-in)* | Adds **Condition**, **Percentile**, and **% of Normal** sensors for discharge and depth-to-water by comparing the live reading to ~30 years of daily history. Off by default — the first build downloads the long-term record per gauge, then caches it on disk. See [Condition & percent-of-normal sensors](#condition--percent-of-normal-sensors). |
 | **Data source** *(advanced)* | **Legacy** (WaterServices — stable default) or **Modern** (Water Data OGC API). Only shown when Home Assistant **Advanced Mode** is enabled in your user profile. |
 
 <p align="center">
@@ -209,6 +214,32 @@ These are computed in-memory from the polled values (no extra API calls), so
 they **warm up over the first couple of polls** after a restart or reload and
 report `unknown` until there are at least two distinct readings in the window.
 
+### Condition & percent-of-normal sensors
+
+Opt-in (enable **Percent-of-normal sensors** in the options). For **Discharge**
+(`00060`) and **Depth to Water Level** (`72019`), the integration builds a
+day-of-year *envelope* from ~30 years of USGS daily-mean values and places the
+live reading against it — the same view as [USGS WaterWatch][ww] (streamflow)
+and [Groundwater Watch][gw] (water levels):
+
+| Entity | Unit | Notes |
+|--------|------|-------|
+| *…* Condition | enum | `Much below normal` / `Below normal` / `Normal` / `Above normal` / `Much above normal` (percentile bands <10 / 10–25 / 25–75 / 75–90 / >90) |
+| *…* Percentile | % | Where today's reading falls in its calendar day's historical range |
+| *…* % of Normal | % | Reading as a percentage of the day's historical median |
+
+Depth-to-water is **inverted**: a *deeper* reading means *less* groundwater, so
+a deep level reads as **below normal** — matching Groundwater Watch.
+
+The long-term record is fetched once per gauge (a heavy pull), then **persisted
+on disk** and refreshed only about monthly, so it costs nothing on normal polls.
+Condition/Percentile/% of Normal then update with each live reading. A calendar
+day needs at least ~10 years of values before it reports, so a brand-new or
+short-record gauge may stay `unavailable` until the cache is built.
+
+[ww]: https://waterwatch.usgs.gov/
+[gw]: https://groundwaterwatch.usgs.gov/
+
 ### Station Status
 
 Always present. State is `Active` or `Offline`; when offline it carries an
@@ -221,6 +252,7 @@ Always present. State is `Active` or `Offline`; when offline it carries an
 |--------|------------|
 | Measurement sensors | `usgs_site_id`, `last_reading_time` (when available). On the **Modern** backend also `approval_status` (`Approved`/`Provisional`), `qualifier`, `statistic_id`, `time_series_id`. |
 | Rate / Trend sensors | `usgs_site_id`, `window_minutes`, `sample_count` (Trend also `rate_per_hour`). |
+| Condition / Percentile / % of Normal | `usgs_site_id`, `percentile`, `percent_of_normal`, `condition`, `median`, `sample_count`, `observation_date`, `inverted`, plus `record_years` / `record_start` / `record_end`. |
 | Station Status | `usgs_site_id`, `usgs_waterdata_url`, and `offline_reason` when offline. |
 
 ## Data sources

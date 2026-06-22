@@ -406,6 +406,32 @@ All requests include `f=json` and the API key (`X-Api-Key` header preferred;
 - Build `CoordinatorData` exactly as today (offline detection can additionally use
   `time-series-metadata` `end`, but the current `time`-age logic carries over).
 
+### 7.4 `get_daily_means(site_id, param, statistic_id, start, end)` (✅ verified live)
+
+Powers the opt-in percent-of-normal / condition feature, which needs the
+long-term **daily** record rather than the latest instantaneous value.
+
+- ✅ Query `/collections/daily/items` with `monitoring_location_id=USGS-<site_id>`,
+  `parameter_code`, `statistic_id=00003` (daily mean), and an OGC `datetime`
+  interval `start/end`. URL-param equality and the `datetime` interval are
+  verified working against api.waterdata.usgs.gov.
+- ✅ Pagination is **cursor-based** (`links[].rel == "next"` carries a `cursor=`
+  query param); `_collect_features` follows it. A 30-year pull is ~11k points
+  (~11 pages at `limit=1000`).
+- Each feature: `time` is a plain `YYYY-MM-DD` date; parse `float(value)` and skip
+  the `-999999` sentinel / non-numeric values, same as the IV path.
+- Legacy parity: `LegacyClient.get_daily_means` uses the WaterServices `dv`
+  service (`statCd=00003`, `startDT`/`endDT`), so the feature works on either
+  backend.
+- Cost is managed by the caller (`USGSStatsCoordinator`): the derived day-of-year
+  percentile *envelope* is persisted via a HA `Store` and rebuilt only when
+  missing or older than `STATS_REFRESH_DAYS`, so steady-state polling is unaffected.
+
+**Verified live (2026-06):** Willamette @ Portland `14211720/00060` reproduced
+USGS WaterWatch daily percentiles (P50 identical at 15000 ft³/s; today's daily
+mean → "Below normal"), and groundwater well `474921093144001/72019` confirmed the
+inverted classification (a deep depth-to-water reading → "below normal" level).
+
 ---
 
 ## 8. Code change map

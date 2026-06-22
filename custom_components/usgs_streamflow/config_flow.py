@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -27,6 +28,7 @@ from .const import (
     BACKEND_MODERN,
     CONF_API_KEY,
     CONF_BACKEND,
+    CONF_ENABLE_STATS,
     CONF_ENABLED_PARAMETERS,
     CONF_SCAN_INTERVAL,
     CONF_SITE_ID,
@@ -236,6 +238,10 @@ class USGSStreamflowOptionsFlow(config_entries.OptionsFlow):
                     mode=SelectSelectorMode.LIST,
                 )
             ),
+            vol.Optional(
+                CONF_ENABLE_STATS,
+                default=options.get(CONF_ENABLE_STATS, False),
+            ): BooleanSelector(),
         }
 
         # API backend is an advanced choice (the modern API is still alpha), so

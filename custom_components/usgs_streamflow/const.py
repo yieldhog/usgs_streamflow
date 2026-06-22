@@ -25,6 +25,39 @@ CONF_BACKEND = "backend"
 BACKEND_LEGACY = "legacy"
 BACKEND_MODERN = "modern"
 
+# --- Percent-of-normal / condition statistics (opt-in) ------------------------
+# Build day-of-year percentile "envelopes" from the long-term daily-mean record
+# and expose Condition / Percentile / %-of-Normal sensors that place the live
+# reading against its own history — the WaterWatch / Groundwater Watch view.
+#
+# Off by default: turning it on triggers a one-time ~30-year daily-values pull
+# per gauge (heavy), after which the envelope is persisted on disk and refreshed
+# only occasionally.  Enable it per entry in the options flow.
+CONF_ENABLE_STATS = "enable_stats"
+
+# USGS NWIS statistic code for the daily *mean* value — the series the envelope
+# is built from (matches the statistic USGS WaterWatch percentiles use).
+STAT_DAILY_MEAN = "00003"
+
+# Years of daily-mean record requested when (re)building an envelope.
+STATS_RECORD_YEARS = 30
+
+# Centered day-of-year window, in days, for grouping historical values per
+# calendar day.  0 = exact calendar day (matches USGS WaterWatch daily
+# statistics, verified live); a small window trades a little fidelity for
+# smoother percentiles on short records.
+STATS_WINDOW_DAYS = 0
+
+# Rebuild a cached envelope once it is older than this many days.  The long-term
+# distribution barely shifts day to day, so an infrequent refresh keeps the heavy
+# fetch rare while still folding in new water years.
+STATS_REFRESH_DAYS = 30
+
+# Minimum distinct daily values a calendar day needs before we report a
+# percentile for it, so one or two years of record can't yield a meaningless
+# classification.
+STATS_MIN_SAMPLES = 10
+
 # Polling cadence.  USGS instantaneous-values data typically refreshes about
 # every 15 minutes, so polling faster just adds load without yielding new data.
 DEFAULT_SCAN_INTERVAL_MINUTES = 15
@@ -95,8 +128,19 @@ SUPPORTED_PARAMETERS: dict[str, str] = {
     PARAM_VELOCITY: "Water Velocity",
 }
 
+# Parameters that get statistics sensors, mapped to whether the percentile is
+# inverted.  Depth-to-water is inverted: a deeper reading means *less*
+# groundwater, so a high depth percentile maps to a low (below-normal)
+# water-level condition — confirmed live against USGS Groundwater Watch.
+STATS_PARAMS: dict[str, bool] = {
+    PARAM_DISCHARGE: False,
+    PARAM_GW_DEPTH: True,
+}
+
 USGS_IV_URL = "https://waterservices.usgs.gov/nwis/iv/"
 USGS_SITE_URL = "https://waterservices.usgs.gov/nwis/site/"
+# Legacy daily-values service — long-term daily statistics for envelope building.
+USGS_DV_URL = "https://waterservices.usgs.gov/nwis/dv/"
 
 # Shared site-number parsing.  Used by the config flow to validate user input and
 # by the client backends to decide between a direct site-number lookup and a
