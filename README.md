@@ -228,8 +228,11 @@ and [Groundwater Watch][gw] (water levels):
 | *…* Percentile | % | Where today's reading falls in its calendar day's historical range |
 | *…* % of Normal | % | Reading as a percentage of the day's historical median |
 
-Depth-to-water is **inverted**: a *deeper* reading means *less* groundwater, so
-a deep level reads as **below normal** — matching Groundwater Watch.
+Depth-to-water is **inverted** throughout: a *deeper* reading means *less*
+groundwater, so a deep level reads as **below normal** (Condition), a **low
+percentile**, and **below 100% of normal** — the % of Normal is flipped to
+`median ÷ depth` so it tracks water rather than depth and stays consistent with
+the other two. This matches Groundwater Watch.
 
 The long-term record is fetched once per gauge (a heavy pull), then **persisted
 on disk** and refreshed only about monthly, so it costs nothing on normal polls.

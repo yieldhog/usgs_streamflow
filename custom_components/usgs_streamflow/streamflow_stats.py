@@ -122,6 +122,23 @@ def classify(percentile: float, invert: bool = False) -> tuple[str, float]:
     return cond, p
 
 
+def _percent_of_normal(
+    value: float, median: float | None, invert: bool = False
+) -> float:
+    """Reading as a percentage of its day's historical median.
+
+    For a direct quantity (discharge) this is ``value / median``: 70% means
+    low flow, 130% high.  For an inverted quantity (depth-to-water) the ratio is
+    flipped to ``median / value`` so the number tracks *water*, not depth — a
+    deeper-than-normal reading reads below 100%, staying consistent with the
+    inverted condition/percentile rather than contradicting them.
+    """
+    if not median or not value:
+        return 0.0
+    ratio = (median / value) if invert else (value / median)
+    return round(ratio * 100, 1)
+
+
 @dataclass(frozen=True)
 class StatsResult:
     """The placement of one live reading against its day's envelope."""
@@ -177,9 +194,7 @@ class Envelope:
         raw_pct = percentile_of(stat.anchors, value)
         condition, reported = classify(raw_pct, invert)
         median = stat.anchors.get(50)
-        percent_of_normal = (
-            round(value / median * 100, 1) if median else 0.0
-        )
+        percent_of_normal = _percent_of_normal(value, median, invert)
         return StatsResult(
             condition=condition,
             percentile=round(reported, 1),
