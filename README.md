@@ -246,9 +246,11 @@ but not gauge height.
 
 The long-term record is fetched once per gauge (a heavy pull), then **persisted
 on disk** and refreshed only about monthly, so it costs nothing on normal polls.
-Condition/Percentile/% of Normal then update with each live reading. A calendar
-day needs at least ~10 years of values before it reports, so a brand-new or
-short-record gauge may stay `unavailable` until the cache is built.
+Condition/Percentile/% of Normal then update with each live reading. The 30-year
+request is a *ceiling*, not a requirement — a gauge just uses whatever history it
+has. A calendar day needs about **5 years** of values before it reports, so very
+new gauges (under ~5 years) stay `unavailable`, but a typical multi-year record
+is plenty.
 
 [ww]: https://waterwatch.usgs.gov/
 [gw]: https://groundwaterwatch.usgs.gov/

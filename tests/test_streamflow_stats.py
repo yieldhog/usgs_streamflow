@@ -7,6 +7,7 @@ from custom_components.usgs_streamflow.const import (
     PARAM_DISCHARGE,
     PARAM_GAUGE_HEIGHT,
     PARAM_GW_DEPTH,
+    STATS_MIN_SAMPLES,
     STATS_PARAMS,
 )
 
@@ -100,6 +101,22 @@ class TestBuildEnvelope(unittest.TestCase):
             recs, param_cd="00060", statistic_id="00003", min_samples=10
         )
         self.assertIsNone(env)
+
+    def test_short_five_year_record_builds(self):
+        # A ~5-year gauge must produce an envelope at the shipped floor so it
+        # isn't perpetually unavailable.
+        recs = make_records({y: float((y - 2000) * 100 + 100) for y in range(2000, 2005)})
+        env = st.build_envelope(
+            recs, param_cd="00060", statistic_id="00003",
+            min_samples=STATS_MIN_SAMPLES, built=datetime(2026, 6, 20),
+        )
+        self.assertIsNotNone(env)
+        self.assertEqual(env.days["06-19"].n, 5)
+        res = env.evaluate(date(2026, 6, 19), 300.0)  # median of 100..500
+        self.assertEqual(res.condition, st.CONDITION_NORMAL)
+
+    def test_shipped_min_samples_supports_five_years(self):
+        self.assertLessEqual(STATS_MIN_SAMPLES, 5)
 
     def test_builds_day_and_metadata(self):
         vals = {y: float((y - 1990) * 100) for y in range(1991, 2022)}  # 31 yrs

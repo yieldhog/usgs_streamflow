@@ -40,7 +40,11 @@ CONF_ENABLE_STATS = "enable_stats"
 # is built from (matches the statistic USGS WaterWatch percentiles use).
 STAT_DAILY_MEAN = "00003"
 
-# Years of daily-mean record requested when (re)building an envelope.
+# Upper bound on how many years of daily-mean record to *request* when building
+# an envelope.  This is a ceiling, not a requirement: USGS returns only what
+# exists in the window, so a short-record gauge simply uses its few years and a
+# long-record one gets the full span.  Keep it generous — more history makes the
+# percentiles more robust and costs nothing extra for short-record gauges.
 STATS_RECORD_YEARS = 30
 
 # Centered day-of-year window, in days, for grouping historical values per
@@ -55,9 +59,12 @@ STATS_WINDOW_DAYS = 0
 STATS_REFRESH_DAYS = 30
 
 # Minimum distinct daily values a calendar day needs before we report a
-# percentile for it, so one or two years of record can't yield a meaningless
-# classification.
-STATS_MIN_SAMPLES = 10
+# percentile for it.  With exact-day grouping (window = 0) each calendar day
+# gets ~1 value per year of record, so this is effectively the minimum years of
+# record: 5 lets a ~5-year gauge report (5 sorted points can still populate the
+# interior percentile bands) while still excluding one- or two-year records that
+# can't express a "normal" range.  Gauges with gappy years may drop a few days.
+STATS_MIN_SAMPLES = 5
 
 # Polling cadence.  USGS instantaneous-values data typically refreshes about
 # every 15 minutes, so polling faster just adds load without yielding new data.
