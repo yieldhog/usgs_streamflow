@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Protocol
 
 import aiohttp
@@ -29,6 +29,7 @@ from .const import (
     DEMO_KEY,
     SITE_NUMBER_RE,
     SUPPORTED_PARAMETERS,
+    USGS_DV_URL,
     USGS_IV_URL,
     USGS_SITE_URL,
     normalize_site_number,
@@ -62,6 +63,21 @@ def _parse_iso_datetime(dt_str: Any) -> datetime | None:
         # Defensive: treat naive timestamps as UTC
         parsed = parsed.replace(tzinfo=dt_util.UTC)
     return parsed
+
+
+def _parse_iso_date(dt_str: Any) -> date | None:
+    """Parse a ``YYYY-MM-DD`` (or longer ISO) string into a ``date``.
+
+    Daily-values timestamps are plain calendar dates; the legacy ``dv`` service
+    and the modern ``daily`` collection both emit them this way.  Returns
+    ``None`` for empty or unparseable values.  Shared by both backends.
+    """
+    if not dt_str:
+        return None
+    try:
+        return date.fromisoformat(str(dt_str)[:10])
+    except (ValueError, TypeError):
+        return None
 
 
 def _value_to_float(raw: Any) -> float | None:
@@ -189,6 +205,17 @@ class UsgsClient(Protocol):
         self, site_id: str, params: list[str]
     ) -> LatestResult:
         """Fetch the latest value for each requested parameter at ``site_id``."""
+        ...
+
+    async def get_daily_means(
+        self, site_id: str, param: str, statistic_id: str, start: str, end: str
+    ) -> list[tuple[date, float]]:
+        """Fetch the long-term daily record for ``param`` between two ISO dates.
+
+        Returns ``(date, value)`` pairs (order unspecified) for the requested
+        daily statistic — the raw material the percent-of-normal envelope is
+        built from.  Used only when the statistics feature is enabled.
+        """
         ...
 
 
@@ -377,6 +404,59 @@ class LegacyClient:
             )
 
         return LatestResult(readings=readings, station_reporting=True)
+
+    # -- daily history ----------------------------------------------------- #
+    async def get_daily_means(
+        self, site_id: str, param: str, statistic_id: str, start: str, end: str
+    ) -> list[tuple[date, float]]:
+        """Fetch daily values for ``param`` via the legacy ``dv`` service."""
+        session = async_get_clientsession(self._hass)
+        request_params = {
+            "sites": site_id,
+            "parameterCd": param,
+            "statCd": statistic_id,
+            "startDT": start,
+            "endDT": end,
+            "format": "json",
+        }
+        timeout = aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT)
+        try:
+            async with session.get(
+                USGS_DV_URL, params=request_params, timeout=timeout
+            ) as resp:
+                if resp.status == 404:
+                    return []  # no record for this site/param — empty, not an error
+                if resp.status != 200:
+                    raise UsgsHttpStatusError(resp.status)
+                data = await resp.json(content_type=None)
+        except UsgsClientError:
+            raise
+        except Exception as err:  # noqa: BLE001 - normalize transport errors
+            raise UsgsCommunicationError(str(err)) from err
+
+        return _parse_daily_values(data)
+
+
+def _parse_daily_values(data) -> list[tuple[date, float]]:
+    """Flatten a USGS ``dv`` JSON response into ``(date, value)`` pairs."""
+    try:
+        time_series_list = data["value"]["timeSeries"]
+    except (KeyError, TypeError) as err:
+        raise UsgsResponseFormatError(str(err)) from err
+
+    out: list[tuple[date, float]] = []
+    for series in time_series_list:
+        try:
+            value_list = series["values"][0]["value"]
+        except (KeyError, IndexError):
+            continue
+        for entry in value_list:
+            value = _value_to_float(entry.get("value"))
+            day = _parse_iso_date(entry.get("dateTime"))
+            if value is None or day is None:
+                continue
+            out.append((day, value))
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -641,6 +721,37 @@ class ModernClient:
         # Any features at all means the station is reporting; an empty collection
         # mirrors the legacy "no time series" signal for a discontinued gauge.
         return LatestResult(readings=readings, station_reporting=bool(features))
+
+    # -- daily history ----------------------------------------------------- #
+    async def get_daily_means(
+        self, site_id: str, param: str, statistic_id: str, start: str, end: str
+    ) -> list[tuple[date, float]]:
+        """Fetch daily values for ``param`` from the modern ``daily`` collection.
+
+        Uses an OGC ``datetime`` interval (``start/end``) and follows cursor
+        ``next`` links until the record is exhausted.  Verified live against
+        api.waterdata.usgs.gov.
+        """
+        url = f"{MODERN_BASE_URL}/collections/daily/items"
+        request_params = {
+            "monitoring_location_id": f"USGS-{site_id}",
+            "parameter_code": param,
+            "statistic_id": statistic_id,
+            "datetime": f"{start}/{end}",
+            "f": "json",
+            "limit": str(_PAGE_LIMIT),
+        }
+        features = await self._collect_features(url, request_params)
+
+        out: list[tuple[date, float]] = []
+        for feature in features:
+            props = feature.get("properties") or {}
+            value = _value_to_float(props.get("value"))
+            day = _parse_iso_date(props.get("time"))
+            if value is None or day is None:
+                continue
+            out.append((day, value))
+        return out
 
 
 def _retry_after_seconds(resp, attempt: int) -> float:
