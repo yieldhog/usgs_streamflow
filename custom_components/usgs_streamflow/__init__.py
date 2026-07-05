@@ -59,8 +59,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         reported = coordinator.known_params
         stats_params = {
-            param: invert
-            for param, invert in STATS_PARAMS.items()
+            param: cfg
+            for param, cfg in STATS_PARAMS.items()
             if param in enabled and (not reported or param in reported)
         }
         if stats_params:

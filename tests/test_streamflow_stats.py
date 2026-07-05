@@ -3,6 +3,30 @@ import unittest
 from datetime import date, datetime
 
 from custom_components.usgs_streamflow import streamflow_stats as st
+from custom_components.usgs_streamflow.const import (
+    PARAM_DISCHARGE,
+    PARAM_GAUGE_HEIGHT,
+    PARAM_GW_DEPTH,
+    STATS_PARAMS,
+)
+
+
+class TestStatsParamConfig(unittest.TestCase):
+    def test_discharge_normal_orientation_with_pct(self):
+        cfg = STATS_PARAMS[PARAM_DISCHARGE]
+        self.assertFalse(cfg.invert)
+        self.assertTrue(cfg.percent_of_normal)
+
+    def test_depth_inverted_with_pct(self):
+        cfg = STATS_PARAMS[PARAM_GW_DEPTH]
+        self.assertTrue(cfg.invert)
+        self.assertTrue(cfg.percent_of_normal)
+
+    def test_gauge_height_has_no_percent_of_normal(self):
+        # Datum-relative: Condition/Percentile valid, but a ratio isn't.
+        cfg = STATS_PARAMS[PARAM_GAUGE_HEIGHT]
+        self.assertFalse(cfg.invert)
+        self.assertFalse(cfg.percent_of_normal)
 
 
 def make_records(values_by_year, month=6, day=19):

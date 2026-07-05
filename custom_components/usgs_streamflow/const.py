@@ -1,6 +1,7 @@
 """Constants for the USGS Streamflow integration."""
 
 import re
+from dataclasses import dataclass
 
 DOMAIN = "usgs_streamflow"
 
@@ -128,13 +129,32 @@ SUPPORTED_PARAMETERS: dict[str, str] = {
     PARAM_VELOCITY: "Water Velocity",
 }
 
-# Parameters that get statistics sensors, mapped to whether the percentile is
-# inverted.  Depth-to-water is inverted: a deeper reading means *less*
-# groundwater, so a high depth percentile maps to a low (below-normal)
-# water-level condition — confirmed live against USGS Groundwater Watch.
-STATS_PARAMS: dict[str, bool] = {
-    PARAM_DISCHARGE: False,
-    PARAM_GW_DEPTH: True,
+@dataclass(frozen=True)
+class StatsParamConfig:
+    """How a parameter's statistics behave.
+
+    ``invert`` flips the percentile / condition / %-of-normal so a *higher raw
+    reading* reads as *below normal* — needed for depth-to-water, where deeper
+    means less groundwater.
+
+    ``percent_of_normal`` gates the "% of Normal" sensor.  It is meaningful only
+    for quantities with a real zero (discharge: no flow; depth-to-water: land
+    surface).  Gauge height is measured from an arbitrary local datum, so a ratio
+    to the median has no physical meaning — its Condition and Percentile are
+    still valid (comparing the gauge to its own history, the datum cancels), but
+    it gets no % of Normal.
+    """
+
+    invert: bool = False
+    percent_of_normal: bool = True
+
+
+# Parameters that get statistics sensors and how each behaves.  Confirmed live
+# against USGS WaterWatch (discharge) and Groundwater Watch (depth-to-water).
+STATS_PARAMS: dict[str, StatsParamConfig] = {
+    PARAM_DISCHARGE: StatsParamConfig(invert=False),
+    PARAM_GW_DEPTH: StatsParamConfig(invert=True),
+    PARAM_GAUGE_HEIGHT: StatsParamConfig(invert=False, percent_of_normal=False),
 }
 
 USGS_IV_URL = "https://waterservices.usgs.gov/nwis/iv/"
