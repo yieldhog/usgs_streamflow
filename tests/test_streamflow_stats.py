@@ -135,8 +135,21 @@ class TestEvaluate(unittest.TestCase):
         self.assertTrue(res.inverted)
         self.assertLess(res.percentile, 10)
         self.assertEqual(res.condition, st.CONDITION_MUCH_BELOW)
-        # % of normal still reported as value / median
+        # % of normal is inverted too: a deeper-than-median reading (less water)
+        # reads below 100%, consistent with the below-normal condition.
+        self.assertLess(res.percent_of_normal, 100)
+        self.assertAlmostEqual(res.percent_of_normal, 1600.0 / 3050.0 * 100, places=1)
+
+    def test_inverted_shallow_reading_is_above_normal_pct(self):
+        # A shallow (low) reading = more water -> above 100% of normal.
+        res = self.env.evaluate(date(2026, 6, 19), 800.0, invert=True)
         self.assertGreater(res.percent_of_normal, 100)
+        self.assertAlmostEqual(res.percent_of_normal, 1600.0 / 800.0 * 100, places=1)
+
+    def test_percent_of_normal_zero_value_is_safe(self):
+        # Depth of 0 (water at surface) must not divide-by-zero when inverted.
+        res = self.env.evaluate(date(2026, 6, 19), 0.0, invert=True)
+        self.assertEqual(res.percent_of_normal, 0.0)
 
 
 class TestSerialization(unittest.TestCase):
