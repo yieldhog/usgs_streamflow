@@ -69,8 +69,9 @@ those who want to opt in early — see [Data sources](#data-sources).
 - **Built-in rate-of-change and trend sensors** for level/flow parameters
   (e.g. gauge-height rise in ft/hr and a Rising / Falling / Steady trend).
 - **Opt-in percent-of-normal sensors** — Condition, Percentile, and % of Normal
-  for discharge and depth-to-water vs. ~30 years of daily history (the USGS
-  WaterWatch / Groundwater Watch view), with depth-to-water correctly inverted.
+  for discharge, depth-to-water, and gauge height vs. ~30 years of daily history
+  (the USGS WaterWatch / Groundwater Watch view), with depth-to-water correctly
+  inverted (gauge height gets Condition + Percentile only).
 - **Station Status sensor** — `Active` or `Offline`, with a reason, so seasonal
   and winter shutdowns are handled cleanly.
 - **No phantom entities** — a sensor is created only for a parameter the site
@@ -151,7 +152,7 @@ After adding a site, click **Configure** on the entry to adjust:
 | **Update interval** | How often to poll USGS, in minutes (minimum **15**). USGS instantaneous data refreshes about every 15 minutes, so polling faster adds load without new data. |
 | **Parameters to show** | Uncheck measurements you don't want as sensors. Unchecked parameters won't create sensors even if the site reports them. |
 | **API key** *(optional)* | An [api.data.gov](https://api.data.gov/signup/) key for the **Modern** backend. Leave blank to fall back to a shared, rate-limited demo key. The default (legacy) backend ignores it. Pre-filled from another entry if you've already set one. |
-| **Percent-of-normal sensors** *(opt-in)* | Adds **Condition**, **Percentile**, and **% of Normal** sensors for discharge and depth-to-water by comparing the live reading to ~30 years of daily history. Off by default — the first build downloads the long-term record per gauge, then caches it on disk. See [Condition & percent-of-normal sensors](#condition--percent-of-normal-sensors). |
+| **Percent-of-normal sensors** *(opt-in)* | Adds **Condition**, **Percentile**, and **% of Normal** sensors for discharge, depth-to-water, and gauge height (gauge height: Condition + Percentile only) by comparing the live reading to ~30 years of daily history. Off by default — the first build downloads the long-term record per gauge, then caches it on disk. See [Condition & percent-of-normal sensors](#condition--percent-of-normal-sensors). |
 | **Data source** *(advanced)* | **Legacy** (WaterServices — stable default) or **Modern** (Water Data OGC API). Only shown when Home Assistant **Advanced Mode** is enabled in your user profile. |
 
 <p align="center">
@@ -217,10 +218,10 @@ report `unknown` until there are at least two distinct readings in the window.
 ### Condition & percent-of-normal sensors
 
 Opt-in (enable **Percent-of-normal sensors** in the options). For **Discharge**
-(`00060`) and **Depth to Water Level** (`72019`), the integration builds a
-day-of-year *envelope* from ~30 years of USGS daily-mean values and places the
-live reading against it — the same view as [USGS WaterWatch][ww] (streamflow)
-and [Groundwater Watch][gw] (water levels):
+(`00060`), **Depth to Water Level** (`72019`), and **Gauge Height** (`00065`),
+the integration builds a day-of-year *envelope* from ~30 years of USGS
+daily-mean values and places the live reading against it — the same view as
+[USGS WaterWatch][ww] (streamflow) and [Groundwater Watch][gw] (water levels):
 
 | Entity | Unit | Notes |
 |--------|------|-------|
@@ -233,6 +234,15 @@ groundwater, so a deep level reads as **below normal** (Condition), a **low
 percentile**, and **below 100% of normal** — the % of Normal is flipped to
 `median ÷ depth` so it tracks water rather than depth and stays consistent with
 the other two. This matches Groundwater Watch.
+
+**Gauge height** gets **Condition** and **Percentile** only — no % of Normal.
+It's measured from an arbitrary local datum, so comparing the gauge to its own
+history (percentile/condition) is meaningful, but a *ratio* to the median isn't
+(discharge and depth-to-water have real zeros; gauge-height datum does not).
+Note that USGS publishes a daily-mean **stage** record for only a minority of
+gauges, so the gauge-height stat sensors are created **only where that record
+exists** — on most gauges you'll see them for discharge (and depth-to-water)
+but not gauge height.
 
 The long-term record is fetched once per gauge (a heavy pull), then **persisted
 on disk** and refreshed only about monthly, so it costs nothing on normal polls.

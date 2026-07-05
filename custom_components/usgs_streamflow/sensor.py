@@ -487,9 +487,19 @@ async def async_setup_entry(
     # Percent-of-normal / condition sensors (opt-in).  The stats coordinator is
     # present only when the feature is enabled, and its ``params`` are already
     # limited to the stats-eligible parameters this station serves.
+    #
+    # Only create sensors for parameters that actually built an envelope.  The
+    # long-term fetch is awaited before this runs, so ``envelopes`` is populated.
+    # This skips parameters USGS has no daily record for — notably gauge height,
+    # which most gauges do not publish as a daily statistic — so we never leave
+    # permanently-unavailable stat entities behind.
     if stats_coordinator is not None:
-        for param_cd in stats_coordinator.params:
-            if param_cd in params_to_create and param_cd in enabled:
+        for param_cd, cfg in stats_coordinator.params.items():
+            if (
+                param_cd in params_to_create
+                and param_cd in enabled
+                and param_cd in stats_coordinator.envelopes
+            ):
                 label = SUPPORTED_PARAMETERS.get(param_cd, param_cd)
                 entities.append(
                     USGSConditionSensor(stats_coordinator, entry, param_cd, label)
@@ -497,11 +507,14 @@ async def async_setup_entry(
                 entities.append(
                     USGSPercentileSensor(stats_coordinator, entry, param_cd, label)
                 )
-                entities.append(
-                    USGSPercentOfNormalSensor(
-                        stats_coordinator, entry, param_cd, label
+                # % of Normal only where a ratio to the median is meaningful
+                # (see StatsParamConfig — excluded for datum-relative gauge height).
+                if cfg.percent_of_normal:
+                    entities.append(
+                        USGSPercentOfNormalSensor(
+                            stats_coordinator, entry, param_cd, label
+                        )
                     )
-                )
 
     async_add_entities(entities)
 
