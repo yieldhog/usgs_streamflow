@@ -3,6 +3,30 @@ import unittest
 from datetime import date, datetime
 
 from custom_components.usgs_streamflow import streamflow_stats as st
+from custom_components.usgs_streamflow.const import (
+    PARAM_DISCHARGE,
+    PARAM_GAUGE_HEIGHT,
+    PARAM_GW_DEPTH,
+    STATS_PARAMS,
+)
+
+
+class TestStatsParamConfig(unittest.TestCase):
+    def test_discharge_normal_orientation_with_pct(self):
+        cfg = STATS_PARAMS[PARAM_DISCHARGE]
+        self.assertFalse(cfg.invert)
+        self.assertTrue(cfg.percent_of_normal)
+
+    def test_depth_inverted_with_pct(self):
+        cfg = STATS_PARAMS[PARAM_GW_DEPTH]
+        self.assertTrue(cfg.invert)
+        self.assertTrue(cfg.percent_of_normal)
+
+    def test_gauge_height_has_no_percent_of_normal(self):
+        # Datum-relative: Condition/Percentile valid, but a ratio isn't.
+        cfg = STATS_PARAMS[PARAM_GAUGE_HEIGHT]
+        self.assertFalse(cfg.invert)
+        self.assertFalse(cfg.percent_of_normal)
 
 
 def make_records(values_by_year, month=6, day=19):
@@ -135,8 +159,21 @@ class TestEvaluate(unittest.TestCase):
         self.assertTrue(res.inverted)
         self.assertLess(res.percentile, 10)
         self.assertEqual(res.condition, st.CONDITION_MUCH_BELOW)
-        # % of normal still reported as value / median
+        # % of normal is inverted too: a deeper-than-median reading (less water)
+        # reads below 100%, consistent with the below-normal condition.
+        self.assertLess(res.percent_of_normal, 100)
+        self.assertAlmostEqual(res.percent_of_normal, 1600.0 / 3050.0 * 100, places=1)
+
+    def test_inverted_shallow_reading_is_above_normal_pct(self):
+        # A shallow (low) reading = more water -> above 100% of normal.
+        res = self.env.evaluate(date(2026, 6, 19), 800.0, invert=True)
         self.assertGreater(res.percent_of_normal, 100)
+        self.assertAlmostEqual(res.percent_of_normal, 1600.0 / 800.0 * 100, places=1)
+
+    def test_percent_of_normal_zero_value_is_safe(self):
+        # Depth of 0 (water at surface) must not divide-by-zero when inverted.
+        res = self.env.evaluate(date(2026, 6, 19), 0.0, invert=True)
+        self.assertEqual(res.percent_of_normal, 0.0)
 
 
 class TestSerialization(unittest.TestCase):

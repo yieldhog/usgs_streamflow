@@ -33,6 +33,7 @@ from .const import (
     STATS_RECORD_YEARS,
     STATS_REFRESH_DAYS,
     STATS_WINDOW_DAYS,
+    StatsParamConfig,
 )
 from .coordinator import USGSStreamflowCoordinator
 
@@ -63,7 +64,7 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         hass: HomeAssistant,
         source: USGSStreamflowCoordinator,
         client: UsgsClient,
-        params: dict[str, bool],
+        params: dict[str, StatsParamConfig],
     ) -> None:
         super().__init__(
             hass,
@@ -73,7 +74,10 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         )
         self._source = source
         self._client = client
-        # param_cd -> invert flag, limited to what this station serves.
+        # Mirror the source's site id so entities bound to this coordinator can
+        # read it the same way they do on the main coordinator.
+        self.site_id = source.site_id
+        # param_cd -> StatsParamConfig, limited to what this station serves.
         self.params = params
         self._store: Store = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}_stats_{source.site_id}"
@@ -156,7 +160,7 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         if source_data is None:
             return results
         today = dt_util.utcnow().date()
-        for param, invert in self.params.items():
+        for param, cfg in self.params.items():
             envelope = self.envelopes.get(param)
             if envelope is None:
                 continue
@@ -165,7 +169,7 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
                 continue
             reading_dt = source_data.reading_times.get(param)
             observation_date = reading_dt.date() if reading_dt else today
-            result = envelope.evaluate(observation_date, value, invert)
+            result = envelope.evaluate(observation_date, value, cfg.invert)
             if result is not None:
                 results[param] = result
         return results
