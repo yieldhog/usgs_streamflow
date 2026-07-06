@@ -136,6 +136,17 @@ SUPPORTED_PARAMETERS: dict[str, str] = {
     PARAM_VELOCITY: "Water Velocity",
 }
 
+# Parameters that get rate-of-change / trend sensors (level- and flow-type, where
+# rate-of-rise is the canonical signal).  Single source of truth: sensor.py builds
+# its DERIVED_SENSORS for exactly these, and the coordinator seeds the rate buffer
+# for them at startup.  Kept here so both can share it without a circular import.
+DERIVED_PARAM_CODES: tuple[str, ...] = (
+    PARAM_GAUGE_HEIGHT,
+    PARAM_DISCHARGE,
+    PARAM_GW_DEPTH,
+)
+
+
 @dataclass(frozen=True)
 class StatsParamConfig:
     """How a parameter's statistics behave.

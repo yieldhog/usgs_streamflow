@@ -211,9 +211,12 @@ also creates, automatically:
 | *…* Rate | ft/hr or ft³/s/hr | Per-hour rate of change over a trailing 60-minute window of real observations |
 | *…* Trend | enum | `rising` / `falling` / `steady`, with a small dead-band so noise reads as steady |
 
-These are computed in-memory from the polled values (no extra API calls), so
-they **warm up over the first couple of polls** after a restart or reload and
-report `unknown` until there are at least two distinct readings in the window.
+These are computed in-memory from a trailing buffer of real observations. On
+startup the buffer is **warm-started** with the last ~3 hours of data (one small
+fetch per parameter), so Rate/Trend report **immediately** after a restart or
+reload instead of waiting to accumulate. If that warm-up fetch is unavailable
+they fall back to filling over the first couple of polls, reporting `unknown`
+until there are at least two distinct readings in the 60-minute window.
 
 ### Condition & percent-of-normal sensors
 

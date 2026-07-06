@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Protocol
 
 import aiohttp
@@ -215,6 +215,18 @@ class UsgsClient(Protocol):
         Returns ``(date, value)`` pairs (order unspecified) for the requested
         daily statistic — the raw material the percent-of-normal envelope is
         built from.  Used only when the statistics feature is enabled.
+        """
+        ...
+
+    async def get_recent_values(
+        self, site_id: str, param: str, minutes: int
+    ) -> list[tuple[datetime, float]]:
+        """Fetch the last ``minutes`` of instantaneous values for ``param``.
+
+        Returns ``(reading_time, value)`` pairs used to warm-start the derived
+        rate/trend buffer so those sensors report immediately after a restart
+        instead of accumulating over several polls.  Best-effort: an empty list
+        (no recent data) is a normal result, not an error.
         """
         ...
 
@@ -436,6 +448,34 @@ class LegacyClient:
 
         return _parse_daily_values(data)
 
+    async def get_recent_values(
+        self, site_id: str, param: str, minutes: int
+    ) -> list[tuple[datetime, float]]:
+        """Fetch the trailing ``minutes`` of instantaneous values via the IV service."""
+        session = async_get_clientsession(self._hass)
+        request_params = {
+            "sites": site_id,
+            "parameterCd": param,
+            "format": "json",
+            "period": f"PT{int(minutes)}M",
+        }
+        timeout = aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT)
+        try:
+            async with session.get(
+                USGS_IV_URL, params=request_params, timeout=timeout
+            ) as resp:
+                if resp.status == 404:
+                    return []
+                if resp.status != 200:
+                    raise UsgsHttpStatusError(resp.status)
+                data = await resp.json(content_type=None)
+        except UsgsClientError:
+            raise
+        except Exception as err:  # noqa: BLE001 - normalize transport errors
+            raise UsgsCommunicationError(str(err)) from err
+
+        return _parse_instantaneous_series(data)
+
 
 def _parse_daily_values(data) -> list[tuple[date, float]]:
     """Flatten a USGS ``dv`` JSON response into ``(date, value)`` pairs."""
@@ -456,6 +496,32 @@ def _parse_daily_values(data) -> list[tuple[date, float]]:
             if value is None or day is None:
                 continue
             out.append((day, value))
+    return out
+
+
+def _parse_instantaneous_series(data) -> list[tuple[datetime, float]]:
+    """Flatten a USGS IV JSON response into ``(reading_time, value)`` pairs.
+
+    Unlike ``_parse_latest`` (which keeps only the newest point per series), this
+    returns the full trailing window used to seed the rate/trend buffer.
+    """
+    try:
+        time_series_list = data["value"]["timeSeries"]
+    except (KeyError, TypeError) as err:
+        raise UsgsResponseFormatError(str(err)) from err
+
+    out: list[tuple[datetime, float]] = []
+    for series in time_series_list:
+        try:
+            value_list = series["values"][0]["value"]
+        except (KeyError, IndexError):
+            continue
+        for entry in value_list:
+            value = _value_to_float(entry.get("value"))
+            when = _parse_iso_datetime(entry.get("dateTime"))
+            if value is None or when is None:
+                continue
+            out.append((when, value))
     return out
 
 
@@ -752,6 +818,37 @@ class ModernClient:
                 continue
             out.append((day, value))
         return out
+
+    async def get_recent_values(
+        self, site_id: str, param: str, minutes: int
+    ) -> list[tuple[datetime, float]]:
+        """Fetch the trailing ``minutes`` of a parameter from the ``continuous`` collection."""
+        end = dt_util.utcnow()
+        start = end - timedelta(minutes=minutes)
+        url = f"{MODERN_BASE_URL}/collections/continuous/items"
+        request_params = {
+            "monitoring_location_id": f"USGS-{site_id}",
+            "parameter_code": param,
+            "datetime": f"{_iso_instant(start)}/{_iso_instant(end)}",
+            "f": "json",
+            "limit": str(_PAGE_LIMIT),
+        }
+        features = await self._collect_features(url, request_params)
+
+        out: list[tuple[datetime, float]] = []
+        for feature in features:
+            props = feature.get("properties") or {}
+            value = _value_to_float(props.get("value"))
+            when = _parse_iso_datetime(props.get("time"))
+            if value is None or when is None:
+                continue
+            out.append((when, value))
+        return out
+
+
+def _iso_instant(moment: datetime) -> str:
+    """Format a tz-aware datetime as an RFC 3339 instant for an OGC datetime range."""
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _retry_after_seconds(resp, attempt: int) -> float:
