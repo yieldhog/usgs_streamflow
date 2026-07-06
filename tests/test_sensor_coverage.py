@@ -2,7 +2,10 @@
 import unittest
 
 from custom_components.usgs_streamflow import sensor as sensor_mod
-from custom_components.usgs_streamflow.const import SUPPORTED_PARAMETERS
+from custom_components.usgs_streamflow.const import (
+    DERIVED_PARAM_CODES,
+    SUPPORTED_PARAMETERS,
+)
 
 NEW_PARAMS = {
     "00020", "00052", "00035", "00036",   # weather
@@ -34,6 +37,12 @@ class TestSensorCoverage(unittest.TestCase):
 
     def test_new_params_present(self):
         self.assertTrue(NEW_PARAMS <= set(SUPPORTED_PARAMETERS))
+
+    def test_derived_sensors_match_shared_param_codes(self):
+        # The coordinator seeds the rate buffer for DERIVED_PARAM_CODES; the
+        # sensor descriptions must cover exactly the same set (no drift).
+        derived = {cfg.param_cd for cfg in sensor_mod.DERIVED_SENSORS}
+        self.assertEqual(derived, set(DERIVED_PARAM_CODES))
 
     def test_descriptions_well_formed(self):
         for d in self.descs:

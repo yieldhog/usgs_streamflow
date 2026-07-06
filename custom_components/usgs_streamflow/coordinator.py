@@ -13,12 +13,14 @@ from .client import (
     LatestResult,
     LegacyClient,
     UsgsClient,
+    UsgsClientError,
     UsgsCommunicationError,
     UsgsHttpStatusError,
     UsgsResponseFormatError,
 )
 from .const import (
     DEFAULT_SCAN_INTERVAL_MINUTES,
+    DERIVED_PARAM_CODES,
     DOMAIN,
     HISTORY_RETENTION_MINUTES,
     SUPPORTED_PARAMETERS,
@@ -99,11 +101,14 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # Rolling buffer of recent observations per parameter code, used by
         # the derived rate-of-change and trend sensors.  Keyed by reading
         # timestamp so repeated transmissions of the same observation are
-        # not double-counted.  In memory only: cleared on restart/reload, so
-        # derived sensors warm up over the first couple of polls.
+        # not double-counted.  In memory only: cleared on restart/reload, but
+        # warm-started from recent history on the first poll (see _seed_history)
+        # so the derived sensors report immediately rather than over a few polls.
         self._history: dict[str, deque[tuple[datetime, float]]] = defaultdict(
             deque
         )
+        # One-shot guard so the rate/trend buffer is seeded only on the first poll.
+        self._history_seeded = False
 
     async def _async_update_data(self) -> CoordinatorData:
         """Fetch latest readings from USGS via the client and assemble data."""
@@ -132,6 +137,12 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if result.reported_params:
             self.known_params.update(result.reported_params)
 
+        # Warm-start the rate/trend buffer once, before this poll's point is
+        # appended, so those sensors report immediately after a restart/reload.
+        if not self._history_seeded:
+            self._history_seeded = True
+            await self._seed_history()
+
         self._append_history(result)
 
         return result
@@ -157,6 +168,43 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
             cutoff = reading_dt - timedelta(minutes=HISTORY_RETENTION_MINUTES)
             while buf and buf[0][0] < cutoff:
                 buf.popleft()
+
+    async def _seed_history(self) -> None:
+        """Warm-start the rate/trend buffer from recent instantaneous history.
+
+        Fetches the trailing ``HISTORY_RETENTION_MINUTES`` of real observations
+        for each reported rate/trend parameter and loads them into the buffer, so
+        those sensors compute a rate on the very first poll instead of waiting to
+        accumulate points.  Best-effort: any failure (or a backend without the
+        recent-values endpoint) is logged at debug and skipped — the buffer then
+        simply fills the old way over subsequent polls.
+        """
+        for param_cd in DERIVED_PARAM_CODES:
+            if self.known_params and param_cd not in self.known_params:
+                continue
+            try:
+                points = await self._client.get_recent_values(
+                    self.site_id, param_cd, HISTORY_RETENTION_MINUTES
+                )
+            except UsgsClientError as err:
+                _LOGGER.debug(
+                    "Could not seed %s history for %s: %s",
+                    param_cd, self.site_id, err,
+                )
+                continue
+            except NotImplementedError:
+                continue
+            buf = self._history[param_cd]
+            for reading_dt, value in sorted(points):
+                if value is None or reading_dt is None:
+                    continue
+                if buf and reading_dt <= buf[-1][0]:
+                    continue
+                buf.append((reading_dt, value))
+            if buf:
+                cutoff = buf[-1][0] - timedelta(minutes=HISTORY_RETENTION_MINUTES)
+                while buf and buf[0][0] < cutoff:
+                    buf.popleft()
 
     def recent_points(
         self, param_cd: str, window_minutes: int

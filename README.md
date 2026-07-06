@@ -211,9 +211,12 @@ also creates, automatically:
 | *…* Rate | ft/hr or ft³/s/hr | Per-hour rate of change over a trailing 60-minute window of real observations |
 | *…* Trend | enum | `rising` / `falling` / `steady`, with a small dead-band so noise reads as steady |
 
-These are computed in-memory from the polled values (no extra API calls), so
-they **warm up over the first couple of polls** after a restart or reload and
-report `unknown` until there are at least two distinct readings in the window.
+These are computed in-memory from a trailing buffer of real observations. On
+startup the buffer is **warm-started** with the last ~3 hours of data (one small
+fetch per parameter), so Rate/Trend report **immediately** after a restart or
+reload instead of waiting to accumulate. If that warm-up fetch is unavailable
+they fall back to filling over the first couple of polls, reporting `unknown`
+until there are at least two distinct readings in the 60-minute window.
 
 ### Condition & percent-of-normal sensors
 
@@ -246,9 +249,11 @@ but not gauge height.
 
 The long-term record is fetched once per gauge (a heavy pull), then **persisted
 on disk** and refreshed only about monthly, so it costs nothing on normal polls.
-Condition/Percentile/% of Normal then update with each live reading. A calendar
-day needs at least ~10 years of values before it reports, so a brand-new or
-short-record gauge may stay `unavailable` until the cache is built.
+Condition/Percentile/% of Normal then update with each live reading. The 30-year
+request is a *ceiling*, not a requirement — a gauge just uses whatever history it
+has. A calendar day needs about **5 years** of values before it reports, so very
+new gauges (under ~5 years) stay `unavailable`, but a typical multi-year record
+is plenty.
 
 [ww]: https://waterwatch.usgs.gov/
 [gw]: https://groundwaterwatch.usgs.gov/
