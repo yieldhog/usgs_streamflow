@@ -126,10 +126,10 @@ Base: `https://api.waterdata.usgs.gov/ogcapi/v0`
 | Legacy (`waterservices.usgs.gov`) | Modern (`api.waterdata.usgs.gov/ogcapi/v0`) | Used by us |
 |---|---|---|
 | `/nwis/iv/` (latest) | `/collections/latest-continuous` | ✅ **Yes — the poll** |
-| `/nwis/iv/` (history) | `/collections/continuous` | No (we only need latest) |
+| `/nwis/iv/` (history) | `/collections/continuous` | ✅ **Yes — rate/trend warm-start** (§7.5) |
 | `/nwis/site/` (search/metadata) | `/collections/monitoring-locations` | ✅ **Yes — site search** |
 | `/nwis/site/` (series availability) | `/collections/time-series-metadata` | ✅ **Yes — capability gating** |
-| `/nwis/dv/` | `/collections/daily`, `/latest-daily` | No |
+| `/nwis/dv/` | `/collections/daily`, `/latest-daily` | ✅ **Yes — percent-of-normal envelope** (§7.4) |
 | `/measurements/` | `/collections/field-measurements`, `/channel-measurements` | No |
 
 All three endpoints we depend on are ✅ confirmed present in the live
@@ -431,6 +431,25 @@ long-term **daily** record rather than the latest instantaneous value.
 USGS WaterWatch daily percentiles (P50 identical at 15000 ft³/s; today's daily
 mean → "Below normal"), and groundwater well `474921093144001/72019` confirmed the
 inverted classification (a deep depth-to-water reading → "below normal" level).
+
+### 7.5 `get_recent_values(site_id, param, minutes)` (✅ verified live)
+
+Warm-starts the in-memory rate/trend buffer so those derived sensors report a
+rate on the first poll after a restart/reload instead of accumulating over
+several polls.
+
+- ✅ Query `/collections/continuous/items` with `monitoring_location_id=USGS-<site_id>`,
+  `parameter_code`, and an OGC `datetime` interval `now-<minutes>/now`; returns
+  the full trailing window of 5-minute observations (not just the latest).
+- Each feature: `time` is a full RFC 3339 instant; parse `float(value)` and skip
+  the `-999999` sentinel, as elsewhere.
+- Legacy parity: `LegacyClient.get_recent_values` uses the IV service with
+  `period=PT<minutes>M`.
+- Best-effort: the coordinator seeds only the reported rate/trend parameters
+  (`DERIVED_PARAM_CODES`) once, and any failure silently falls back to the
+  fill-over-polls behavior.
+- **Verified live (2026-07):** Potomac `01646500/00060` seeded 32 points over
+  ~155 min and computed a rate on the first poll.
 
 ---
 

@@ -211,9 +211,12 @@ also creates, automatically:
 | *…* Rate | ft/hr or ft³/s/hr | Per-hour rate of change over a trailing 60-minute window of real observations |
 | *…* Trend | enum | `rising` / `falling` / `steady`, with a small dead-band so noise reads as steady |
 
-These are computed in-memory from the polled values (no extra API calls), so
-they **warm up over the first couple of polls** after a restart or reload and
-report `unknown` until there are at least two distinct readings in the window.
+These are computed in-memory from a trailing buffer of real observations. On
+startup the buffer is **warm-started** with the last ~3 hours of data (one small
+fetch per parameter), so Rate/Trend report **immediately** after a restart or
+reload instead of waiting to accumulate. If that warm-up fetch is unavailable
+they fall back to filling over the first couple of polls, reporting `unknown`
+until there are at least two distinct readings in the 60-minute window.
 
 ### Condition & percent-of-normal sensors
 
@@ -246,9 +249,11 @@ but not gauge height.
 
 The long-term record is fetched once per gauge (a heavy pull), then **persisted
 on disk** and refreshed only about monthly, so it costs nothing on normal polls.
-Condition/Percentile/% of Normal then update with each live reading. A calendar
-day needs at least ~10 years of values before it reports, so a brand-new or
-short-record gauge may stay `unavailable` until the cache is built.
+Condition/Percentile/% of Normal then update with each live reading. The 30-year
+request is a *ceiling*, not a requirement — a gauge just uses whatever history it
+has. A calendar day needs about **5 years** of values before it reports, so very
+new gauges (under ~5 years) stay `unavailable`, but a typical multi-year record
+is plenty.
 
 [ww]: https://waterwatch.usgs.gov/
 [gw]: https://groundwaterwatch.usgs.gov/
@@ -355,8 +360,11 @@ the gauge's datum.
 - **A measurement shows `Unavailable`.** The site is offline/seasonal, or it
   doesn't serve that parameter. Check the **Station Status** sensor's
   `offline_reason`.
-- **Rate/Trend sensors show `unknown`.** They warm up — they need at least two
-  distinct readings within the 60-minute window after a restart or reload.
+- **Rate/Trend sensors show `unknown`.** On restart/reload they're warm-started
+  from recent history and should populate on the first poll. If they linger on
+  `unknown`, the warm-up fetch was unavailable (or the river genuinely hasn't
+  moved — a flat river reads `steady`, not `unknown`); they'll fill once there
+  are two distinct readings in the 60-minute window.
 - **`HTTP 429` / rate-limit errors (Modern backend).** You're using the demo key
   or polling many sites; add a free personal [api.data.gov](https://api.data.gov/signup/)
   key and/or raise the update interval.
@@ -372,8 +380,12 @@ the gauge's datum.
 - All USGS access goes through one swappable client, so Legacy and Modern
   backends are interchangeable and the rest of the integration is
   backend-agnostic.
-- Parsing, offline detection, and the rate/trend buffer are covered by a
-  dependency-free unit-test suite (`tests/`, run with
+- With the percent-of-normal feature enabled, a second coordinator builds each
+  gauge's day-of-year percentile envelope from ~30 years of daily-mean values,
+  persists it to disk, and refreshes it only about monthly — so the live sensors
+  just compare each reading to the cached envelope with no extra polling cost.
+- Parsing, offline detection, the rate/trend buffer, and the percent-of-normal
+  logic are covered by a dependency-free unit-test suite (`tests/`, run with
   `python -m unittest discover -s tests -t .`) that also runs in CI.
 
 ## Contributing
