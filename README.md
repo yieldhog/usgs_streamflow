@@ -1,6 +1,6 @@
 # USGS Streamflow for Home Assistant
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub Release](https://img.shields.io/github/release/yieldhog/usgs_streamflow.svg)](https://github.com/yieldhog/usgs_streamflow/releases)
 [![Hassfest](https://github.com/yieldhog/usgs_streamflow/actions/workflows/hassfest.yml/badge.svg)](https://github.com/yieldhog/usgs_streamflow/actions/workflows/hassfest.yml)
 [![Tests](https://github.com/yieldhog/usgs_streamflow/actions/workflows/tests.yml/badge.svg)](https://github.com/yieldhog/usgs_streamflow/actions/workflows/tests.yml)
@@ -94,11 +94,24 @@ those who want to opt in early — see [Data sources](#data-sources).
 
 ### Via HACS (recommended)
 
+**USGS Streamflow** is in the default HACS store:
+
 1. Open **HACS** in Home Assistant.
-2. Three-dot menu → **Custom repositories**.
-3. Add `https://github.com/yieldhog/usgs_streamflow` as an **Integration**.
-4. Find **USGS Streamflow** in HACS and click **Download**.
-5. **Restart** Home Assistant.
+2. Search for **USGS Streamflow**.
+3. Click **Download**.
+4. **Restart** Home Assistant.
+
+<details>
+<summary>Not showing up yet? Add it as a custom repository</summary>
+
+If the default-store listing hasn't reached your instance yet, you can add the
+repo directly:
+
+1. Open **HACS** → three-dot menu → **Custom repositories**.
+2. Add `https://github.com/yieldhog/usgs_streamflow` as an **Integration**.
+3. Find **USGS Streamflow**, click **Download**, then **restart** Home Assistant.
+
+</details>
 
 ### Beta / pre-release versions
 
