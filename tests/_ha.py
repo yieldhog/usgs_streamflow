@@ -179,6 +179,22 @@ class _Coordinatorish:
         return None
 
 
+class _HaError(Exception):
+    """Stand-in for HomeAssistantError: accepts the translation_* kwargs."""
+
+    def __init__(
+        self,
+        *args,
+        translation_domain=None,
+        translation_key=None,
+        translation_placeholders=None,
+    ) -> None:
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders
+
+
 class _Store:
     """Minimal homeassistant.helpers.storage.Store stand-in (in-memory)."""
 
@@ -246,7 +262,7 @@ def install_stubs() -> None:
         "homeassistant.helpers.update_coordinator",
         DataUpdateCoordinator=_Coordinatorish,
         CoordinatorEntity=_Coordinatorish,
-        UpdateFailed=type("UpdateFailed", (Exception,), {}),
+        UpdateFailed=type("UpdateFailed", (_HaError,), {}),
     )
     helpers.device_registry = mod(
         "homeassistant.helpers.device_registry",
@@ -283,10 +299,10 @@ def install_stubs() -> None:
 
     mod(
         "homeassistant.exceptions",
-        ConfigEntryNotReady=type("ConfigEntryNotReady", (Exception,), {}),
-        ConfigEntryAuthFailed=type("ConfigEntryAuthFailed", (Exception,), {}),
-        HomeAssistantError=type("HomeAssistantError", (Exception,), {}),
-        ServiceValidationError=type("ServiceValidationError", (Exception,), {}),
+        ConfigEntryNotReady=type("ConfigEntryNotReady", (_HaError,), {}),
+        ConfigEntryAuthFailed=type("ConfigEntryAuthFailed", (_HaError,), {}),
+        HomeAssistantError=_HaError,
+        ServiceValidationError=type("ServiceValidationError", (_HaError,), {}),
     )
 
     mod(

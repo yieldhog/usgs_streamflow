@@ -123,15 +123,28 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._client, "uses_auth", False
             ):
                 raise ConfigEntryAuthFailed(
-                    "USGS API rejected the api.data.gov key"
+                    translation_domain=DOMAIN, translation_key="invalid_auth"
                 ) from err
             raise UpdateFailed(
-                f"USGS API returned HTTP {err.status} for site {self.site_id}"
+                translation_domain=DOMAIN,
+                translation_key="http_status",
+                translation_placeholders={
+                    "status": str(err.status),
+                    "site_id": self.site_id,
+                },
             ) from err
         except UsgsResponseFormatError as err:
-            raise UpdateFailed(f"Unexpected USGS response structure: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="response_format",
+                translation_placeholders={"error": str(err)},
+            ) from err
         except UsgsCommunicationError as err:
-            raise UpdateFailed(f"Error communicating with USGS API: {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN,
+                translation_key="communication",
+                translation_placeholders={"error": str(err)},
+            ) from err
 
         result = self._build_coordinator_data(latest)
 

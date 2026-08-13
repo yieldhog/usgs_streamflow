@@ -32,8 +32,11 @@ def _coord(client):
 class TestAuthFailureMapping(unittest.TestCase):
     def test_modern_403_raises_auth_failed(self):
         coord = _coord(_FailClient(403, uses_auth=True))
-        with self.assertRaises(ConfigEntryAuthFailed):
+        with self.assertRaises(ConfigEntryAuthFailed) as ctx:
             run(coord._async_update_data())
+        # Exception carries a translation key (exception-translations rule).
+        self.assertEqual(ctx.exception.translation_key, "invalid_auth")
+        self.assertEqual(ctx.exception.translation_domain, "usgs_streamflow")
 
     def test_modern_401_raises_auth_failed(self):
         coord = _coord(_FailClient(401, uses_auth=True))
@@ -49,8 +52,10 @@ class TestAuthFailureMapping(unittest.TestCase):
     def test_modern_500_is_update_failed_not_auth(self):
         # Non-auth status on an authenticated backend stays a retryable failure.
         coord = _coord(_FailClient(500, uses_auth=True))
-        with self.assertRaises(UpdateFailed):
+        with self.assertRaises(UpdateFailed) as ctx:
             run(coord._async_update_data())
+        self.assertEqual(ctx.exception.translation_key, "http_status")
+        self.assertEqual(ctx.exception.translation_placeholders["status"], "500")
 
 
 if __name__ == "__main__":

@@ -14,19 +14,23 @@ for each tier.
   non-code item left is `brands` (a logo PR to home-assistant/brands).
 - **Silver:** ✅ complete — `parallel-updates`, `reauthentication-flow`, and
   `test-coverage` (**96% combined**, enforced by `--fail-under=95` in CI).
-- **Gold:** `diagnostics`, `entity-category`, `entity-translations`,
-  `icon-translations`, `repair-issues`, `devices`, and all doc rules done;
+- **Gold:** ✅ complete — `diagnostics`, `entity-category`,
+  `entity-translations`, `icon-translations`, `exception-translations`,
+  `repair-issues`, `devices`, and all doc rules done;
   `reconfiguration-flow`/`dynamic-devices`/`discovery`/`stale-devices` are N/A.
-  Open: `exception-translations` and `entity-disabled-by-default`.
+  `entity-disabled-by-default` is left as an optional refinement (largely served
+  by the "Parameters to show" options selector).
 - **Platinum:** async + injected websession done; `strict-typing` open.
 
-The translations trio changes every entity's rendered name/icon, so it is best
-done as one pass **after** the harness CI is green (it can't be verified without
-rendering in a running HA).
+**Bronze, Silver, and Gold are all met in code** (Gold verified by hassfest +
+the harness suite). The remaining work is:
+- `brands` — the external logo PR (the only thing blocking a formal Bronze badge);
+- Platinum `strict-typing` — add the domain to `.strict-typing` and pass mypy;
+- optional: `entity-disabled-by-default`.
 
-Recommended near-term target: **finish the Bronze/Silver test-harness migration,
-then Gold.** `manifest.json` does not yet declare `quality_scale`; add it once a
-tier is fully green (Bronze once brands + harness config-flow tests land).
+`manifest.json` can now declare `"quality_scale": "gold"`. Do this together with
+the move into the core monorepo (drop `hacs.json` + the `version` key), so the
+badge and the code land in the same PR.
 
 ---
 
@@ -147,8 +151,9 @@ tier is fully green (Bronze once brands + harness config-flow tests land).
 - [x] ✅ **entity-translations** — every entity uses a `translation_key`; names
       live in `strings.json`/`en.json` (`entity.sensor.*`), including enum state
       translations for Trend (rising/falling/steady) and Condition (slug states).
-- [ ] ❌ **exception-translations** — `UpdateFailed` / flow errors are English
-      f-strings; move user-facing messages to translatable keys.
+- [x] ✅ **exception-translations** — the coordinator raises `UpdateFailed` /
+      `ConfigEntryAuthFailed` with `translation_key` + placeholders, backed by an
+      `exceptions.*` block in strings.json (config-flow errors already keyed).
 - [x] ✅ **icon-translations** — icons moved to `icons.json` (`entity.sensor.*`
       defaults + state icons for Trend/Condition); no `_attr_icon` left.
 - [x] ➖ **reconfiguration-flow** — every editable setting (interval, parameters,

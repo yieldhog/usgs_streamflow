@@ -223,5 +223,19 @@
         "name": "Depth to Water Level % of Normal"
       }
     }
+  },
+  "exceptions": {
+    "http_status": {
+      "message": "The USGS API returned HTTP {status} for site {site_id}."
+    },
+    "response_format": {
+      "message": "The USGS API returned an unexpected response: {error}."
+    },
+    "communication": {
+      "message": "Error communicating with the USGS API: {error}."
+    },
+    "invalid_auth": {
+      "message": "The USGS API rejected the api.data.gov key. Update the key to reconnect."
+    }
   }
 }
