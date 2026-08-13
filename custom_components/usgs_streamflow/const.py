@@ -136,6 +136,23 @@ SUPPORTED_PARAMETERS: dict[str, str] = {
     PARAM_VELOCITY: "Water Velocity",
 }
 
+# Some sites publish reservoir water-surface elevation under an alternate code
+# instead of the NGVD-1929 62614 the sensor is keyed on: the generic
+# "above datum" 00062, or the NAVD-1988 62615. All three are feet. Treat the
+# alternates as aliases of the canonical 62614 so a reservoir site gets one
+# consistent "Reservoir Elevation" sensor regardless of which code it reports.
+PARAM_RESERVOIR_ELEV_ABOVE_DATUM = "00062"  # reservoir elevation above datum, ft
+PARAM_RESERVOIR_ELEV_NAVD88 = "62615"       # reservoir elevation above NAVD 1988, ft
+PARAM_ALIASES: dict[str, str] = {
+    PARAM_RESERVOIR_ELEV_ABOVE_DATUM: PARAM_RESERVOIR_ELEV,
+    PARAM_RESERVOIR_ELEV_NAVD88: PARAM_RESERVOIR_ELEV,
+}
+
+
+def canonical_param(code: str | None) -> str | None:
+    """Map an alias parameter code to the canonical code the sensor keys on."""
+    return PARAM_ALIASES.get(code, code)
+
 # Parameters that get rate-of-change / trend sensors (level- and flow-type, where
 # rate-of-rise is the canonical signal).  Single source of truth: sensor.py builds
 # its DERIVED_SENSORS for exactly these, and the coordinator seeds the rate buffer

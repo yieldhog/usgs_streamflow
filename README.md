@@ -191,7 +191,7 @@ reports, and rate/trend sensors for level/flow parameters.
 | Discharge (Tidally Filtered) | ft³/s | 72137 | Tidally filtered flow |
 | Water Velocity | ft/s | 72255 | Mean velocity |
 | Depth to Water Level | ft | 72019 | Below land surface (groundwater wells) |
-| Reservoir Elevation | ft | 62614 | Water-surface elevation above datum |
+| Reservoir Elevation | ft | 62614 | Water-surface elevation; also read from `00062` (above datum) and `62615` (NAVD 1988), normalized to one sensor |
 | Reservoir Storage | acre-ft | 00054 | |
 | Water Temperature | °C | 00010 | |
 | Specific Conductance | µS/cm | 00095 | At 25 °C |

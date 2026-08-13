@@ -174,5 +174,32 @@ class TestAuth(unittest.TestCase):
         self.assertEqual(session.calls[-1]["headers"]["X-Api-Key"], "DEMO_KEY")
 
 
+class TestReservoirElevationAlias(unittest.TestCase):
+    """Reservoir-elevation alias codes normalize to the canonical 62614."""
+
+    def setUp(self):
+        self.client = ModernClient(object(), api_key="K")
+
+    def test_alias_00062_latest_value_keyed_as_canonical(self):
+        session = _ha.FakeSession([_ha.FakeResp(json_data=fc([
+            feat({"parameter_code": "00062", "value": "660.5",
+                  "time": "2026-06-11T03:00:00Z"}),
+        ]))])
+        _ha.set_session(session)
+        # The fetch list includes the alias code (00062) alongside 62614.
+        res = run(self.client.get_latest_values("02187010", ["62614", "00062"]))
+        self.assertIn("62614", res.readings)
+        self.assertNotIn("00062", res.readings)
+        self.assertEqual(res.readings["62614"].value, 660.5)
+
+    def test_alias_00062_reported_as_canonical_capability(self):
+        session = _ha.FakeSession([_ha.FakeResp(json_data=fc([
+            feat({"parameter_code": "00062",
+                  "computation_period_identifier": "Points"}),
+        ]))])
+        _ha.set_session(session)
+        self.assertEqual(run(self.client.get_site_parameters("02187010")), {"62614"})
+
+
 if __name__ == "__main__":
     unittest.main()

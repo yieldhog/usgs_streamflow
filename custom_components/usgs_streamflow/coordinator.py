@@ -23,14 +23,16 @@ from .const import (
     DERIVED_PARAM_CODES,
     DOMAIN,
     HISTORY_RETENTION_MINUTES,
+    PARAM_ALIASES,
     SUPPORTED_PARAMETERS,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 # Every supported parameter is requested each poll; the station's response tells
-# us which it actually has.
-FETCH_PARAM_LIST = list(SUPPORTED_PARAMETERS)
+# us which it actually has. Alias codes (e.g. reservoir elevation 00062/62615)
+# are requested too, then normalized to their canonical code in the client.
+FETCH_PARAM_LIST = list(SUPPORTED_PARAMETERS) + list(PARAM_ALIASES)
 
 # If the most recent USGS reading is older than this, the station is likely
 # seasonally shut down or decommissioned.

@@ -32,6 +32,7 @@ from .const import (
     USGS_DV_URL,
     USGS_IV_URL,
     USGS_SITE_URL,
+    canonical_param,
     normalize_site_number,
 )
 
@@ -395,7 +396,9 @@ class LegacyClient:
 
         for series in time_series_list:
             try:
-                param_cd = series["variable"]["variableCode"][0]["value"]
+                param_cd = canonical_param(
+                    series["variable"]["variableCode"][0]["value"]
+                )
                 value_list = series["values"][0]["value"]
             except (KeyError, IndexError):
                 continue
@@ -738,7 +741,9 @@ class ModernClient:
             props = feature.get("properties") or {}
             if props.get("computation_period_identifier") != _CONTINUOUS_PERIOD:
                 continue
-            code = props.get("parameter_code")
+            # Normalize alias codes (e.g. reservoir elevation 00062/62615) to the
+            # canonical code before the supported-parameter check.
+            code = canonical_param(props.get("parameter_code"))
             if code in SUPPORTED_PARAMETERS:
                 found.add(code)
         return found
@@ -766,9 +771,12 @@ class ModernClient:
         readings: dict[str, Reading] = {}
         for feature in features:
             props = feature.get("properties") or {}
-            param_cd = props.get("parameter_code")
-            if param_cd not in wanted:
+            raw_cd = props.get("parameter_code")
+            if raw_cd not in wanted:
                 continue
+            # Key alias codes (e.g. reservoir elevation 00062/62615) under the
+            # canonical code so the existing sensor reads the value.
+            param_cd = canonical_param(raw_cd)
             reading_dt = _parse_iso_datetime(props.get("time"))
             existing = readings.get(param_cd)
             if existing is not None and not _is_newer(
