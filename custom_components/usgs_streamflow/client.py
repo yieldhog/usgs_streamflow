@@ -186,6 +186,11 @@ class UsgsClient(Protocol):
     happens upstream.
     """
 
+    # Whether this backend authenticates (so the coordinator can treat an HTTP
+    # 401/403 as an auth failure that should trigger the reauth flow, rather than
+    # a transient error to retry).
+    uses_auth: bool
+
     async def search_sites(
         self, term: str, *, state: str | None = None
     ) -> list[SiteHit]:
@@ -258,6 +263,9 @@ class LegacyClient:
     Wraps the exact requests and parsing the integration used before the client
     abstraction existed, so behavior is unchanged.
     """
+
+    # WaterServices is unauthenticated, so a 401/403 is never an auth problem.
+    uses_auth = False
 
     def __init__(self, hass: HomeAssistant, api_key: str | None = None) -> None:
         self._hass = hass
@@ -572,6 +580,10 @@ class ModernClient:
     so it is a drop-in replacement.  Authenticates with an api.data.gov key via
     the ``X-Api-Key`` header and backs off on HTTP 429.
     """
+
+    # Authenticates with an api.data.gov key, so a 401/403 means the key is
+    # missing/invalid and the reauth flow should run.
+    uses_auth = True
 
     def __init__(self, hass: HomeAssistant, api_key: str | None = None) -> None:
         self._hass = hass

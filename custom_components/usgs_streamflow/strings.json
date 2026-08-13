@@ -23,17 +23,29 @@
         "data_description": {
           "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. The current data source doesn't require it — leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at {signup_url}."
         }
+      },
+      "reauth_confirm": {
+        "title": "Update USGS API key",
+        "description": "The Modern (Water Data OGC API) backend rejected the api.data.gov key for this gauge. Enter a valid key to continue. Get a free key at {signup_url}.",
+        "data": {
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "Your api.data.gov key for the Modern USGS Water Data OGC API."
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not reach the USGS API. Check your internet connection.",
+      "invalid_auth": "The USGS API rejected that key. Check the api.data.gov key and try again.",
       "no_sites_found": "No active stream gauges matched. Try a broader name or a different state code.",
       "search_required": "Please enter a stream name or site number.",
       "state_required_for_name_search": "A state code is required when searching by name (e.g. CO). To search nationwide, enter a site number directly instead.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This gauge station is already configured."
+      "already_configured": "This gauge station is already configured.",
+      "reauth_successful": "The API key was updated."
     }
   },
   "options": {

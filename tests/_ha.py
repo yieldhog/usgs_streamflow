@@ -273,6 +273,14 @@ def install_stubs() -> None:
     )
 
     mod(
+        "homeassistant.exceptions",
+        ConfigEntryNotReady=type("ConfigEntryNotReady", (Exception,), {}),
+        ConfigEntryAuthFailed=type("ConfigEntryAuthFailed", (Exception,), {}),
+        HomeAssistantError=type("HomeAssistantError", (Exception,), {}),
+        ServiceValidationError=type("ServiceValidationError", (Exception,), {}),
+    )
+
+    mod(
         "homeassistant.const",
         DEGREE="°",
         PERCENTAGE="%",

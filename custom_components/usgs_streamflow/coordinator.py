@@ -6,6 +6,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -116,6 +117,14 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self.site_id, FETCH_PARAM_LIST
             )
         except UsgsHttpStatusError as err:
+            # On an authenticated backend, 401/403 means the api.data.gov key is
+            # missing/invalid — trigger reauth instead of retrying forever.
+            if err.status in (401, 403) and getattr(
+                self._client, "uses_auth", False
+            ):
+                raise ConfigEntryAuthFailed(
+                    "USGS API rejected the api.data.gov key"
+                ) from err
             raise UpdateFailed(
                 f"USGS API returned HTTP {err.status} for site {self.site_id}"
             ) from err

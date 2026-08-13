@@ -22,7 +22,13 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .client import LegacyClient, SiteHit
+from .client import (
+    LegacyClient,
+    ModernClient,
+    SiteHit,
+    UsgsClientError,
+    UsgsHttpStatusError,
+)
 from .const import (
     BACKEND_LEGACY,
     BACKEND_MODERN,
@@ -184,6 +190,51 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "count": str(len(self._sites)),
                 "signup_url": API_SIGNUP_URL,
             },
+        )
+
+    # -- reauth (Modern backend api.data.gov key) -------------------------- #
+    async def async_step_reauth(
+        self, entry_data: dict[str, Any]
+    ) -> config_entries.FlowResult:
+        """Start reauth — the Modern backend rejected the api.data.gov key."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Collect and validate a new api.data.gov key, then reload the entry."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            api_key = user_input.get(CONF_API_KEY, "").strip()
+            client = ModernClient(self.hass, api_key=api_key)
+            try:
+                # A light authenticated call: rejected keys raise 401/403.
+                await client.get_site_parameters(entry.data[CONF_SITE_ID])
+            except UsgsHttpStatusError as err:
+                errors["base"] = (
+                    "invalid_auth" if err.status in (401, 403) else "cannot_connect"
+                )
+            except UsgsClientError:
+                errors["base"] = "cannot_connect"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    options={**entry.options, CONF_API_KEY: api_key},
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_API_KEY): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
+                }
+            ),
+            errors=errors,
+            description_placeholders={"signup_url": API_SIGNUP_URL},
         )
 
 
