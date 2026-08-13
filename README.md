@@ -33,6 +33,8 @@ those who want to opt in early — see [Data sources](#data-sources).
 ## Contents
 
 - [Features](#features)
+- [Use cases](#use-cases)
+- [Known limitations](#known-limitations)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Setup](#setup)
@@ -81,6 +83,37 @@ those who want to opt in early — see [Data sources](#data-sources).
 - **Future-proofed for the USGS API migration** — an optional, opt-in **Modern**
   backend targets the new USGS Water Data OGC API that will replace the legacy
   service (see [Data sources](#data-sources)).
+
+## Use cases
+
+- **Flood / high-water watch** — automate on Gauge Height or its Rate/Trend
+  (e.g. notify when a river rises faster than X ft/hr, or crosses a level).
+- **Drought & low-flow awareness** — use Discharge **Condition** / **% of
+  Normal** to flag when a stream is running below normal for the season.
+- **Recreation** — trigger on discharge/level bands for paddling, fishing, or
+  swimming-hole conditions.
+- **Groundwater / well monitoring** — track Depth to Water Level and its
+  (inverted) Condition to watch an aquifer trend down or recover.
+- **Dashboards** — chart long-term trends since most sensors carry the
+  `measurement` state class and work with HA's long-term statistics.
+
+## Known limitations
+
+- **Percent-of-normal needs history & a real zero.** Stats sensors require about
+  **5 years** of daily record for a gauge (very new gauges stay `unavailable`).
+  Gauge height gets Condition + Percentile only — its arbitrary datum makes a
+  "% of normal" meaningless — and USGS publishes a daily-mean *stage* record for
+  only a minority of gauges, so gauge-height stats often won't appear.
+- **Tidal gauges are noisy for stats.** Comparing an instantaneous reading to a
+  daily-mean envelope swings a lot on tidally-influenced sites (faithful to
+  WaterWatch, just jumpy).
+- **Provisional data.** Recent USGS values are provisional (not quality-assured)
+  and may be revised; the Modern backend exposes an `approval_status` attribute.
+- **Transmission cadence.** USGS often *transmits* about hourly even though it
+  records every ~15 minutes, so the "latest" value can repeat across polls
+  (`last_reading_time` shows the true observation time).
+- **Modern backend is beta.** It targets USGS's still-evolving OGC API and needs
+  an api.data.gov key; the Legacy backend remains the stable default.
 
 ## Requirements
 
