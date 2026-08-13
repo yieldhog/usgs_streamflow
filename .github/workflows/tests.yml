@@ -29,8 +29,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements_test.txt
-      - name: Run HA harness suite with coverage
+      - name: Run both suites with combined coverage
         run: |
-          pytest tests_ha/ \
-            --cov=custom_components.usgs_streamflow \
-            --cov-report=term-missing
+          # The dependency-free logic suite (stubs HA) and the HA harness suite
+          # run in separate processes; append both into one coverage data file
+          # so the total reflects real end-to-end coverage.
+          coverage run -m unittest discover -s tests -t .
+          coverage run -a -m pytest tests_ha/
+          coverage report --show-missing \
+            --include='custom_components/usgs_streamflow/*'
