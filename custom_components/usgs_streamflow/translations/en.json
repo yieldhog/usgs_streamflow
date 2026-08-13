@@ -21,7 +21,7 @@
           "api_key": "API key (optional)"
         },
         "data_description": {
-          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. The current data source doesn't require it — leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at {signup_url}."
+          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. The current data source doesn't require it \u2014 leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at {signup_url}."
         }
       },
       "reauth_confirm": {
@@ -74,6 +74,154 @@
     "demo_key": {
       "title": "USGS Streamflow is using the shared demo API key",
       "description": "This gauge polls the Modern (Water Data OGC API) backend with the shared, rate-limited api.data.gov demo key, so updates may be throttled. Get a free personal key at {signup_url} and set it in the integration's options to remove the limit."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "gauge_height": {
+        "name": "Gauge Height"
+      },
+      "discharge": {
+        "name": "Discharge"
+      },
+      "water_temp": {
+        "name": "Water Temperature"
+      },
+      "specific_conductance": {
+        "name": "Specific Conductance"
+      },
+      "dissolved_oxygen": {
+        "name": "Dissolved Oxygen"
+      },
+      "do_pct_saturation": {
+        "name": "Dissolved Oxygen (% Saturation)"
+      },
+      "ph": {
+        "name": "pH"
+      },
+      "turbidity": {
+        "name": "Turbidity"
+      },
+      "precipitation": {
+        "name": "Precipitation"
+      },
+      "gw_depth": {
+        "name": "Depth to Water Level"
+      },
+      "air_temp": {
+        "name": "Air Temperature"
+      },
+      "relative_humidity": {
+        "name": "Relative Humidity"
+      },
+      "wind_speed": {
+        "name": "Wind Speed"
+      },
+      "wind_direction": {
+        "name": "Wind Direction"
+      },
+      "salinity": {
+        "name": "Salinity"
+      },
+      "nitrate": {
+        "name": "Nitrate"
+      },
+      "chlorophyll": {
+        "name": "Chlorophyll"
+      },
+      "reservoir_elevation": {
+        "name": "Reservoir Elevation"
+      },
+      "reservoir_storage": {
+        "name": "Reservoir Storage"
+      },
+      "discharge_tidally_filtered": {
+        "name": "Discharge (Tidally Filtered)"
+      },
+      "water_velocity": {
+        "name": "Water Velocity"
+      },
+      "gauge_height_rate": {
+        "name": "Gauge Height Rate"
+      },
+      "discharge_rate": {
+        "name": "Discharge Rate"
+      },
+      "gw_depth_rate": {
+        "name": "Depth to Water Level Rate"
+      },
+      "gauge_height_trend": {
+        "name": "Gauge Height Trend",
+        "state": {
+          "rising": "Rising",
+          "falling": "Falling",
+          "steady": "Steady"
+        }
+      },
+      "discharge_trend": {
+        "name": "Discharge Trend",
+        "state": {
+          "rising": "Rising",
+          "falling": "Falling",
+          "steady": "Steady"
+        }
+      },
+      "gw_depth_trend": {
+        "name": "Depth to Water Level Trend",
+        "state": {
+          "rising": "Rising",
+          "falling": "Falling",
+          "steady": "Steady"
+        }
+      },
+      "station_status": {
+        "name": "Station Status"
+      },
+      "discharge_condition": {
+        "name": "Discharge Condition",
+        "state": {
+          "much_below_normal": "Much below normal",
+          "below_normal": "Below normal",
+          "normal": "Normal",
+          "above_normal": "Above normal",
+          "much_above_normal": "Much above normal"
+        }
+      },
+      "gauge_height_condition": {
+        "name": "Gauge Height Condition",
+        "state": {
+          "much_below_normal": "Much below normal",
+          "below_normal": "Below normal",
+          "normal": "Normal",
+          "above_normal": "Above normal",
+          "much_above_normal": "Much above normal"
+        }
+      },
+      "gw_depth_condition": {
+        "name": "Depth to Water Level Condition",
+        "state": {
+          "much_below_normal": "Much below normal",
+          "below_normal": "Below normal",
+          "normal": "Normal",
+          "above_normal": "Above normal",
+          "much_above_normal": "Much above normal"
+        }
+      },
+      "discharge_percentile": {
+        "name": "Discharge Percentile"
+      },
+      "gauge_height_percentile": {
+        "name": "Gauge Height Percentile"
+      },
+      "gw_depth_percentile": {
+        "name": "Depth to Water Level Percentile"
+      },
+      "discharge_pct_of_normal": {
+        "name": "Discharge % of Normal"
+      },
+      "gw_depth_pct_of_normal": {
+        "name": "Depth to Water Level % of Normal"
+      }
     }
   }
 }

@@ -28,13 +28,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 
-# WaterWatch condition classes, ordered low -> high.  Used verbatim as the
-# Condition sensor's enum options and as its state strings.
-CONDITION_MUCH_BELOW = "Much below normal"
-CONDITION_BELOW = "Below normal"
-CONDITION_NORMAL = "Normal"
-CONDITION_ABOVE = "Above normal"
-CONDITION_MUCH_ABOVE = "Much above normal"
+# WaterWatch condition classes, ordered low -> high.  These are the Condition
+# sensor's enum states, so they are lowercase slugs; the human-readable labels
+# ("Much below normal", ...) live in the entity state translations (strings.json).
+CONDITION_MUCH_BELOW = "much_below_normal"
+CONDITION_BELOW = "below_normal"
+CONDITION_NORMAL = "normal"
+CONDITION_ABOVE = "above_normal"
+CONDITION_MUCH_ABOVE = "much_above_normal"
 CONDITION_ORDER: tuple[str, ...] = (
     CONDITION_MUCH_BELOW,
     CONDITION_BELOW,

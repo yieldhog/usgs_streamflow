@@ -1,0 +1,135 @@
+{
+  "entity": {
+    "sensor": {
+      "gauge_height": {
+        "default": "mdi:waves"
+      },
+      "discharge": {
+        "default": "mdi:waves-arrow-right"
+      },
+      "specific_conductance": {
+        "default": "mdi:flash"
+      },
+      "dissolved_oxygen": {
+        "default": "mdi:gas-cylinder"
+      },
+      "do_pct_saturation": {
+        "default": "mdi:percent"
+      },
+      "turbidity": {
+        "default": "mdi:water-opacity"
+      },
+      "precipitation": {
+        "default": "mdi:weather-rainy"
+      },
+      "gw_depth": {
+        "default": "mdi:water-well"
+      },
+      "wind_direction": {
+        "default": "mdi:compass-outline"
+      },
+      "salinity": {
+        "default": "mdi:shaker-outline"
+      },
+      "nitrate": {
+        "default": "mdi:flask-outline"
+      },
+      "chlorophyll": {
+        "default": "mdi:leaf"
+      },
+      "reservoir_elevation": {
+        "default": "mdi:image-filter-hdr"
+      },
+      "reservoir_storage": {
+        "default": "mdi:cup-water"
+      },
+      "discharge_tidally_filtered": {
+        "default": "mdi:waves-arrow-right"
+      },
+      "water_velocity": {
+        "default": "mdi:speedometer"
+      },
+      "gauge_height_rate": {
+        "default": "mdi:waves-arrow-up"
+      },
+      "discharge_rate": {
+        "default": "mdi:waves-arrow-right"
+      },
+      "gw_depth_rate": {
+        "default": "mdi:arrow-expand-vertical"
+      },
+      "gauge_height_trend": {
+        "default": "mdi:trending-neutral",
+        "state": {
+          "rising": "mdi:trending-up",
+          "falling": "mdi:trending-down",
+          "steady": "mdi:trending-neutral"
+        }
+      },
+      "discharge_trend": {
+        "default": "mdi:trending-neutral",
+        "state": {
+          "rising": "mdi:trending-up",
+          "falling": "mdi:trending-down",
+          "steady": "mdi:trending-neutral"
+        }
+      },
+      "gw_depth_trend": {
+        "default": "mdi:trending-neutral",
+        "state": {
+          "rising": "mdi:trending-up",
+          "falling": "mdi:trending-down",
+          "steady": "mdi:trending-neutral"
+        }
+      },
+      "station_status": {
+        "default": "mdi:gauge"
+      },
+      "discharge_condition": {
+        "default": "mdi:water-percent",
+        "state": {
+          "much_below_normal": "mdi:water-alert",
+          "below_normal": "mdi:water-minus",
+          "normal": "mdi:water-check",
+          "above_normal": "mdi:water-plus",
+          "much_above_normal": "mdi:water-alert"
+        }
+      },
+      "gauge_height_condition": {
+        "default": "mdi:water-percent",
+        "state": {
+          "much_below_normal": "mdi:water-alert",
+          "below_normal": "mdi:water-minus",
+          "normal": "mdi:water-check",
+          "above_normal": "mdi:water-plus",
+          "much_above_normal": "mdi:water-alert"
+        }
+      },
+      "gw_depth_condition": {
+        "default": "mdi:water-percent",
+        "state": {
+          "much_below_normal": "mdi:water-alert",
+          "below_normal": "mdi:water-minus",
+          "normal": "mdi:water-check",
+          "above_normal": "mdi:water-plus",
+          "much_above_normal": "mdi:water-alert"
+        }
+      },
+      "discharge_percentile": {
+        "default": "mdi:sort-numeric-ascending"
+      },
+      "gauge_height_percentile": {
+        "default": "mdi:sort-numeric-ascending"
+      },
+      "gw_depth_percentile": {
+        "default": "mdi:sort-numeric-ascending"
+      },
+      "discharge_pct_of_normal": {
+        "default": "mdi:water-percent"
+      },
+      "gw_depth_pct_of_normal": {
+        "default": "mdi:water-percent"
+      }
+    }
+  }
+}

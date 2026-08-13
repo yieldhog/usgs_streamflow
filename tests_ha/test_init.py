@@ -30,9 +30,15 @@ async def test_setup_creates_entities_and_unloads(
 
     ent_reg = er.async_get(hass)
     entries = er.async_entries_for_config_entry(ent_reg, legacy_entry.entry_id)
-    unique_ids = {e.unique_id for e in entries}
-    assert f"usgs_{SITE_ID}_00060" in unique_ids  # discharge
-    assert f"usgs_{SITE_ID}_status" in unique_ids  # station status
+    by_uid = {e.unique_id: e for e in entries}
+    assert f"usgs_{SITE_ID}_00060" in by_uid  # discharge
+    assert f"usgs_{SITE_ID}_status" in by_uid  # station status
+
+    # Names come from translations (entity-translations rule): the discharge
+    # entity resolves to "<device> Discharge".
+    discharge = hass.states.get(by_uid[f"usgs_{SITE_ID}_00060"].entity_id)
+    assert discharge is not None
+    assert discharge.attributes["friendly_name"].endswith("Discharge")
 
     assert await hass.config_entries.async_unload(legacy_entry.entry_id)
     await hass.async_block_till_done()

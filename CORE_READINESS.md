@@ -14,10 +14,10 @@ for each tier.
   non-code item left is `brands` (a logo PR to home-assistant/brands).
 - **Silver:** ✅ complete — `parallel-updates`, `reauthentication-flow`, and
   `test-coverage` (**96% combined**, enforced by `--fail-under=95` in CI).
-- **Gold:** `diagnostics`, `entity-category`, `devices`, and all doc rules done;
+- **Gold:** `diagnostics`, `entity-category`, `entity-translations`,
+  `icon-translations`, `repair-issues`, `devices`, and all doc rules done;
   `reconfiguration-flow`/`dynamic-devices`/`discovery`/`stale-devices` are N/A.
-  Open: the **translations trio** (`entity-translations`, `icon-translations`,
-  `exception-translations`) and `entity-disabled-by-default` / `repair-issues`.
+  Open: `exception-translations` and `entity-disabled-by-default`.
 - **Platinum:** async + injected websession done; `strict-typing` open.
 
 The translations trio changes every entity's rendered name/icon, so it is best
@@ -144,21 +144,20 @@ tier is fully green (Bronze once brands + harness config-flow tests land).
       trend/condition); custom units (cfs, FNU…) correctly carry none.
 - [ ] ⚠️ **entity-disabled-by-default** — all reported parameters are enabled;
       consider disabling the less-common water-quality entities by default.
-- [ ] ❌ **entity-translations** — entity names are English `_attr_name` /
-      description names. Move to `translation_key` + entity translations in
-      `strings.json`.
+- [x] ✅ **entity-translations** — every entity uses a `translation_key`; names
+      live in `strings.json`/`en.json` (`entity.sensor.*`), including enum state
+      translations for Trend (rising/falling/steady) and Condition (slug states).
 - [ ] ❌ **exception-translations** — `UpdateFailed` / flow errors are English
       f-strings; move user-facing messages to translatable keys.
-- [ ] ❌ **icon-translations** — icons are set via `_attr_icon` / descriptions;
-      migrate to `icons.json` icon translations (incl. state-based trend/
-      condition icons).
+- [x] ✅ **icon-translations** — icons moved to `icons.json` (`entity.sensor.*`
+      defaults + state icons for Trend/Condition); no `_attr_icon` left.
 - [x] ➖ **reconfiguration-flow** — every editable setting (interval, parameters,
       API key, backend, stats) is already in the options flow, and the site is
       the entry's immutable identity, so a separate reconfigure flow would be
       redundant. Revisit if API key/backend move out of options.
-- [ ] ⚠️ **repair-issues** — optional but valuable: raise a repair issue for
-      "using rate-limited DEMO_KEY" or "gauge decommissioned / no longer
-      reporting".
+- [x] ✅ **repair-issues** — a WARNING repair issue is raised when the Modern
+      backend polls on the shared, rate-limited DEMO_KEY (cleared when a key is
+      set, on Legacy, or on removal).
 - [x] ➖ **stale-devices** — single device per entry, removed on unload (exempt).
 
 ---
