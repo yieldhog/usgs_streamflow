@@ -78,6 +78,19 @@ class TestLegacyParseLatest(unittest.TestCase):
         with self.assertRaises(UsgsResponseFormatError):
             LegacyClient._parse_latest({"value": None})
 
+    def test_reservoir_alias_00062_keyed_as_canonical(self):
+        """A 00062 reservoir-elevation series parses under canonical 62614."""
+        data = {"value": {"timeSeries": [{
+            "variable": {"variableCode": [{"value": "00062"}]},
+            "values": [{"value": [
+                {"value": "660.5", "dateTime": "2026-06-11T03:45:00.000-05:00"},
+            ]}],
+        }]}}
+        result = LegacyClient._parse_latest(data)
+        self.assertIn("62614", result.readings)
+        self.assertNotIn("00062", result.readings)
+        self.assertEqual(result.readings["62614"].value, 660.5)
+
 
 class TestLegacyParseRdb(unittest.TestCase):
     def test_rows_parsed_with_fips_state(self):
