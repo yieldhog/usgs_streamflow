@@ -69,6 +69,10 @@ from .streamflow_stats import (
 if TYPE_CHECKING:
     from . import UsgsConfigEntry
 
+# All sensors are read-only and driven by the DataUpdateCoordinator (no per-entity
+# polling or device writes), so no update serialization is needed.
+PARALLEL_UPDATES = 0
+
 # CFS (cubic feet per second) is not yet a named HA unit constant; use the
 # canonical string directly.  HA will store/display it correctly; unit
 # conversion to metric is not available for this unit.
