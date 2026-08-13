@@ -13,7 +13,6 @@ from .client import (
     LatestResult,
     LegacyClient,
     UsgsClient,
-    UsgsClientError,
     UsgsCommunicationError,
     UsgsHttpStatusError,
     UsgsResponseFormatError,
@@ -186,25 +185,27 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 points = await self._client.get_recent_values(
                     self.site_id, param_cd, HISTORY_RETENTION_MINUTES
                 )
-            except UsgsClientError as err:
+                buf = self._history[param_cd]
+                for reading_dt, value in sorted(points):
+                    if value is None or reading_dt is None:
+                        continue
+                    if buf and reading_dt <= buf[-1][0]:
+                        continue
+                    buf.append((reading_dt, value))
+                if buf:
+                    cutoff = buf[-1][0] - timedelta(
+                        minutes=HISTORY_RETENTION_MINUTES
+                    )
+                    while buf and buf[0][0] < cutoff:
+                        buf.popleft()
+            except Exception as err:  # noqa: BLE001
+                # Seeding is strictly best-effort: it runs outside the poll's
+                # own error handling, so it must never raise.  On any failure the
+                # buffer simply fills the old way over subsequent polls.
                 _LOGGER.debug(
-                    "Could not seed %s history for %s: %s",
-                    param_cd, self.site_id, err,
+                    "Skipping rate/trend seed for %s param %s: %s",
+                    self.site_id, param_cd, err,
                 )
-                continue
-            except NotImplementedError:
-                continue
-            buf = self._history[param_cd]
-            for reading_dt, value in sorted(points):
-                if value is None or reading_dt is None:
-                    continue
-                if buf and reading_dt <= buf[-1][0]:
-                    continue
-                buf.append((reading_dt, value))
-            if buf:
-                cutoff = buf[-1][0] - timedelta(minutes=HISTORY_RETENTION_MINUTES)
-                while buf and buf[0][0] < cutoff:
-                    buf.popleft()
 
     def recent_points(
         self, param_cd: str, window_minutes: int

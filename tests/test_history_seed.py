@@ -129,6 +129,16 @@ class TestCoordinatorSeeding(unittest.TestCase):
         run(coord._seed_history())  # must not raise
         self.assertEqual(coord.recent_points("00065", 60), [])
 
+    def test_seed_is_non_fatal_on_unexpected_error(self):
+        # A stray (non-UsgsClientError) failure must never break the poll: the
+        # seed runs outside the poll's own error handling.
+        class Boom:
+            async def get_recent_values(self, *a):
+                raise ValueError("unexpected shape")
+        coord = self._coord(Boom(), {"00060"})
+        run(coord._seed_history())  # must not raise
+        self.assertEqual(coord.recent_points("00060", 60), [])
+
 
 if __name__ == "__main__":
     unittest.main()

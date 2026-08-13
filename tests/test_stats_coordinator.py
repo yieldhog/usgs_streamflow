@@ -121,6 +121,22 @@ class TestEnsureAndCompute(unittest.TestCase):
         run(coord._ensure_envelopes())
         self.assertEqual(coord._compute(), {})
 
+    def test_save_cache_failure_is_non_fatal(self):
+        client = FakeClient(thirty_years())
+        source = fake_source({"00060": 1600.0}, {"00060": st_dt("2026-06-11")})
+        coord = self._coord(client, source, {"00060": StatsParamConfig(invert=False)})
+
+        class BoomStore:
+            async def async_load(self):
+                return None
+            async def async_save(self, data):
+                raise OSError("disk full")
+        coord._store = BoomStore()
+        run(coord._ensure_envelopes())  # must not raise despite save failure
+        # Envelope is still available in memory, so stats still compute.
+        self.assertIn("00060", coord.envelopes)
+        self.assertIn("00060", coord._compute())
+
     def test_fetch_failure_leaves_no_envelope(self):
         class Boom:
             calls = []

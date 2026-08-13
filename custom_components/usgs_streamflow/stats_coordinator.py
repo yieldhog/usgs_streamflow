@@ -186,7 +186,13 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
 
     # -- persistence ------------------------------------------------------- #
     async def _load_cache(self) -> None:
-        data = await self._store.async_load()
+        try:
+            data = await self._store.async_load()
+        except Exception as err:  # noqa: BLE001 - cache is best-effort; rebuild on any read error
+            _LOGGER.debug(
+                "Could not load stats cache for %s: %s", self._source.site_id, err
+            )
+            return
         if not data:
             return
         for param, raw in (data.get("envelopes") or {}).items():
@@ -199,6 +205,14 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
                 _LOGGER.debug("Discarding unreadable stats cache for %s", param)
 
     async def _save_cache(self) -> None:
-        await self._store.async_save(
-            {"envelopes": {p: e.to_dict() for p, e in self.envelopes.items()}}
-        )
+        try:
+            await self._store.async_save(
+                {"envelopes": {p: e.to_dict() for p, e in self.envelopes.items()}}
+            )
+        except Exception as err:  # noqa: BLE001 - a failed write must not disrupt stats
+            # The envelope is already held in memory; a persistence failure just
+            # means it will be rebuilt next time rather than loaded from disk.
+            _LOGGER.warning(
+                "Could not persist stats cache for %s: %s",
+                self._source.site_id, err,
+            )
