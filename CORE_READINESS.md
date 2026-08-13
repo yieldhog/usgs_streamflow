@@ -10,15 +10,18 @@ for each tier.
 
 ## Current standing
 
-- **Bronze:** mostly met — remaining: `runtime-data`, `brands`, full config-flow
-  test coverage on the HA harness, removal docs.
-- **Silver:** blocked mainly by `reauthentication-flow`, `parallel-updates`, and
-  measured ≥95% `test-coverage` on the HA test framework.
+- **Bronze:** code-complete. Remaining are outside the Python code: `brands`
+  (a logo PR to home-assistant/brands) and full `config-flow-test-coverage` on
+  the HA test harness.
+- **Silver:** `parallel-updates` and `reauthentication-flow` done. Remaining:
+  measured ≥95% `test-coverage` on the HA test framework (`pytest-
+  homeassistant-custom-component`).
 - **Gold / Platinum:** several documentation rules already met; the technical
   rules (translations, diagnostics, reconfigure, strict typing) are open.
 
-Recommended near-term target: **finish Bronze, then Silver.** `manifest.json`
-does not yet declare `quality_scale`; add it once a tier is fully green.
+Recommended near-term target: **finish the Bronze/Silver test-harness migration,
+then Gold.** `manifest.json` does not yet declare `quality_scale`; add it once a
+tier is fully green (Bronze once brands + harness config-flow tests land).
 
 ---
 
@@ -58,15 +61,14 @@ does not yet declare `quality_scale`; add it once a tier is fully green.
 - [x] ➖ **docs-actions** — no actions (exempt).
 - [x] ✅ **docs-high-level-description** — README opening + Features.
 - [x] ✅ **docs-installation-instructions** — README HACS + manual install.
-- [ ] ❌ **docs-removal-instructions** — add an explicit "How to remove" section
-      to the README.
+- [x] ✅ **docs-removal-instructions** — README "Removing the integration";
+      `async_remove_entry` also deletes the persisted stats cache on removal.
 - [x] ✅ **entity-event-setup** — all entities are `CoordinatorEntity`
       subclasses; subscriptions happen through the coordinator lifecycle.
 - [x] ✅ **entity-unique-id** — every entity sets a stable `unique_id`.
 - [x] ✅ **has-entity-name** — `_attr_has_entity_name = True` throughout.
-- [ ] ❌ **runtime-data** — currently stores the coordinators in
-      `hass.data[DOMAIN][entry.entry_id]`. Migrate to a typed
-      `entry.runtime_data` (`type UsgsConfigEntry = ConfigEntry[UsgsRuntimeData]`).
+- [x] ✅ **runtime-data** — coordinators are stored on `entry.runtime_data`
+      (`UsgsConfigEntry = ConfigEntry[UsgsRuntimeData]`); no hass.data table.
 - [x] ✅ **test-before-configure** — the config flow performs a live site search
       before creating the entry, surfacing `cannot_connect` on failure.
 - [x] ✅ **test-before-setup** — `async_config_entry_first_refresh()` raises
@@ -93,13 +95,12 @@ does not yet declare `quality_scale`; add it once a tier is fully green.
 - [x] ⚠️ **log-when-unavailable** — provided by `DataUpdateCoordinator` (logs the
       first failure, suppresses repeats, logs recovery). Confirm this is
       sufficient for the stats coordinator too.
-- [ ] ❌ **parallel-updates** — declare `PARALLEL_UPDATES = 0` in `sensor.py`
-      (read-only, coordinator-driven — no device write serialization needed).
-- [ ] ❌ **reauthentication-flow** — the Modern backend's api.data.gov key can be
-      wrong/expired. Add `async_step_reauth`, and map HTTP 401/403 to
-      `ConfigEntryAuthFailed` so a bad key prompts re-entry instead of retrying
-      forever. *(Legacy backend is unauthenticated — reauth applies only when the
-      Modern backend is selected.)*
+- [x] ✅ **parallel-updates** — `PARALLEL_UPDATES = 0` declared in `sensor.py`.
+- [x] ✅ **reauthentication-flow** — clients declare `uses_auth`; the coordinator
+      maps HTTP 401/403 on the authenticated (Modern) backend to
+      `ConfigEntryAuthFailed`, and the config flow's `async_step_reauth` /
+      `async_step_reauth_confirm` validate and store a new key, then reload.
+      *(Legacy is unauthenticated, so its 401/403 stays a retryable failure.)*
 - [ ] ⚠️ **test-coverage** — strong logic tests exist, but core requires measured
       ≥95% across all modules on the HA test framework (see structural work).
 
@@ -177,5 +178,8 @@ Not IQS rules by name, but core review scrutinizes these — current state:
       write keeps the in-memory envelope.
 - ✅ Missing-data sentinels (`-999999`), non-numeric values, and unparseable
       timestamps are dropped rather than surfaced.
-- ⏳ Open: distinguish auth failures (401/403) → `ConfigEntryAuthFailed`
-      (paired with the reauth flow above).
+- ✅ Auth failures (401/403 on the authenticated backend) raise
+      `ConfigEntryAuthFailed` → reauth flow, instead of retrying a bad key
+      forever.
+- ✅ Entry removal deletes the persisted stats cache (`async_remove_entry`), so
+      no orphaned files remain.
