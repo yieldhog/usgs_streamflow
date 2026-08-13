@@ -128,6 +128,17 @@ hidden from the normal update flow, so you opt in explicitly.
    `config/custom_components/` directory.
 3. **Restart** Home Assistant.
 
+### Removing the integration
+
+This integration follows standard Home Assistant removal — no extra cleanup.
+
+1. Go to **Settings → Devices & Services**, open the **USGS Streamflow** card.
+2. For each gauge entry, use its **⋮** menu → **Delete**. This removes the entry,
+   its device, and all of its sensors, and clears the on-disk percent-of-normal
+   cache for that gauge.
+3. (Optional) To uninstall the integration entirely, remove **USGS Streamflow**
+   from HACS, then **restart** Home Assistant.
+
 ## Setup
 
 1. **Settings → Devices & Services → Add Integration**.

@@ -191,6 +191,9 @@ class _Store:
     async def async_save(self, data) -> None:
         self._data = data
 
+    async def async_remove(self) -> None:
+        self._data = None
+
 
 _INSTALLED = False
 

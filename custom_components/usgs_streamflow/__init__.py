@@ -21,7 +21,7 @@ from .const import (
     SUPPORTED_PARAMETERS,
 )
 from .coordinator import USGSStreamflowCoordinator
-from .stats_coordinator import USGSStatsCoordinator
+from .stats_coordinator import USGSStatsCoordinator, stats_store
 
 PLATFORMS = ["sensor"]
 
@@ -102,3 +102,8 @@ async def _async_update_listener(hass: HomeAssistant, entry: UsgsConfigEntry) ->
 async def async_unload_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> None:
+    """Clean up the persisted percent-of-normal cache when a gauge is removed."""
+    await stats_store(hass, entry.data[CONF_SITE_ID]).async_remove()
