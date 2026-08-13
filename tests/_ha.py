@@ -257,6 +257,12 @@ def install_stubs() -> None:
         "homeassistant.helpers.entity_platform", AddEntitiesCallback=object
     )
     helpers.storage = mod("homeassistant.helpers.storage", Store=_Store)
+    helpers.issue_registry = mod(
+        "homeassistant.helpers.issue_registry",
+        async_create_issue=lambda *a, **k: None,
+        async_delete_issue=lambda *a, **k: None,
+        IssueSeverity=_Attr,
+    )
     selector_names = [
         "BooleanSelector",
         "NumberSelector", "NumberSelectorConfig", "NumberSelectorMode",

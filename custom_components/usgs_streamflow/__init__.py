@@ -5,10 +5,13 @@ from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 
 from .client import build_client
 from .const import (
+    API_SIGNUP_URL,
     BACKEND_LEGACY,
+    BACKEND_MODERN,
     CONF_API_KEY,
     CONF_BACKEND,
     CONF_ENABLE_STATS,
@@ -17,6 +20,8 @@ from .const import (
     CONF_SITE_ID,
     CONF_SITE_NAME,
     DEFAULT_SCAN_INTERVAL_MINUTES,
+    DEMO_KEY,
+    DOMAIN,
     STATS_PARAMS,
     SUPPORTED_PARAMETERS,
 )
@@ -24,6 +29,33 @@ from .coordinator import USGSStreamflowCoordinator
 from .stats_coordinator import USGSStatsCoordinator, stats_store
 
 PLATFORMS = ["sensor"]
+
+
+def _demo_key_issue_id(entry: ConfigEntry) -> str:
+    return f"demo_key_{entry.entry_id}"
+
+
+def _update_demo_key_issue(
+    hass: HomeAssistant, entry: ConfigEntry, backend: str, api_key: str
+) -> None:
+    """Raise (or clear) a repair issue when the Modern backend uses DEMO_KEY.
+
+    The shared demo key is heavily rate-limited; a repair issue nudges the user
+    to get a free personal key instead of silently hitting 429s.
+    """
+    issue_id = _demo_key_issue_id(entry)
+    if backend == BACKEND_MODERN and (not api_key or api_key == DEMO_KEY):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="demo_key",
+            translation_placeholders={"signup_url": API_SIGNUP_URL},
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 @dataclass
@@ -50,6 +82,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool
     # the options flow reloads the entry, which rebuilds the client here.
     backend = entry.options.get(CONF_BACKEND, BACKEND_LEGACY)
     client = build_client(hass, backend=backend, api_key=api_key)
+
+    # Surface a repair issue when polling the Modern backend on the shared,
+    # rate-limited demo key (cleared when a real key is set or on Legacy).
+    _update_demo_key_issue(hass, entry, backend, api_key)
 
     coordinator = USGSStreamflowCoordinator(
         hass,
@@ -105,5 +141,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> boo
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> None:
-    """Clean up the persisted percent-of-normal cache when a gauge is removed."""
+    """Clean up the persisted cache and any repair issue when a gauge is removed."""
+    ir.async_delete_issue(hass, DOMAIN, _demo_key_issue_id(entry))
     await stats_store(hass, entry.data[CONF_SITE_ID]).async_remove()

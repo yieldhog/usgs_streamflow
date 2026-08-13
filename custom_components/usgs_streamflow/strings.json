@@ -69,5 +69,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "demo_key": {
+      "title": "USGS Streamflow is using the shared demo API key",
+      "description": "This gauge polls the Modern (Water Data OGC API) backend with the shared, rate-limited api.data.gov demo key, so updates may be throttled. Get a free personal key at {signup_url} and set it in the integration's options to remove the limit."
+    }
   }
 }

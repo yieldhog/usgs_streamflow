@@ -30,6 +30,7 @@ from .client import (
     UsgsHttpStatusError,
 )
 from .const import (
+    API_SIGNUP_URL,
     BACKEND_LEGACY,
     BACKEND_MODERN,
     CONF_API_KEY,
@@ -51,9 +52,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 USGS_WATER_DATA_URL = "https://waterdata.usgs.gov/nwis/rt"
-# Where users obtain an api.data.gov key.  Passed as a description placeholder
-# (hassfest forbids literal URLs in translation strings).
-API_SIGNUP_URL = "https://api.data.gov/signup/"
 
 
 def _format_site_label(site: SiteHit) -> str:
