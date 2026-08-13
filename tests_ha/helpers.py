@@ -28,6 +28,24 @@ def iv_json(*params: str) -> dict:
     }
 
 
+def dv_json_today(n_years: int = 6) -> dict:
+    """A legacy `dv` response with N yearly daily-mean values on today's calendar day.
+
+    Enough distinct years (>= STATS_MIN_SAMPLES) for today's day-of-year bucket
+    so an envelope builds and the stats sensors report.
+    """
+    today = datetime.now(timezone.utc).date()
+    values = []
+    for k in range(1, n_years + 1):
+        year = today.year - k
+        try:
+            day = today.replace(year=year)
+        except ValueError:  # today is Feb 29 and `year` isn't a leap year
+            day = today.replace(year=year, day=28)
+        values.append({"value": str(1000 + k * 100), "dateTime": day.isoformat()})
+    return {"value": {"timeSeries": [{"values": [{"value": values}]}]}}
+
+
 def modern_latest_json(*params: str) -> dict:
     """A latest-continuous FeatureCollection for the modern backend."""
     when = recent_iso()
