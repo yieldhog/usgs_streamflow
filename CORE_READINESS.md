@@ -1,0 +1,181 @@
+# Home Assistant Core Readiness — Quality Scale Checklist
+
+Tracking this integration against Home Assistant's [Integration Quality
+Scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
+(IQS), as if submitting to **Home Assistant Core**. Today it ships as a HACS
+custom component; this file records what is already satisfied and what remains
+for each tier.
+
+**Legend:** ✅ done · ⚠️ partial · ❌ to do · ➖ not applicable (exempt)
+
+## Current standing
+
+- **Bronze:** mostly met — remaining: `runtime-data`, `brands`, full config-flow
+  test coverage on the HA harness, removal docs.
+- **Silver:** blocked mainly by `reauthentication-flow`, `parallel-updates`, and
+  measured ≥95% `test-coverage` on the HA test framework.
+- **Gold / Platinum:** several documentation rules already met; the technical
+  rules (translations, diagnostics, reconfigure, strict typing) are open.
+
+Recommended near-term target: **finish Bronze, then Silver.** `manifest.json`
+does not yet declare `quality_scale`; add it once a tier is fully green.
+
+---
+
+## Pre-core structural work (not IQS rules, but required to merge into core)
+
+- [ ] ❌ Move `custom_components/usgs_streamflow/` into the core repo; drop
+      `hacs.json` and the `version` key from `manifest.json` (core integrations
+      are versioned by HA itself).
+- [ ] ❌ Add `"quality_scale": "bronze"` (or higher) to `manifest.json` once the
+      tier is met.
+- [ ] ⚠️ Port the test suite from the hand-rolled stubs in `tests/_ha.py` to
+      `pytest-homeassistant-custom-component` (the core test framework). The
+      current dependency-free suite (97 tests) is good logic coverage but core
+      CI requires the real HA fixtures + measured coverage.
+- [ ] ✅ No third-party runtime requirements (`requirements: []`) — nothing to
+      vendor or vet.
+
+---
+
+## Bronze
+
+- [x] ➖ **action-setup** — no service actions are registered (exempt).
+- [x] ✅ **appropriate-polling** — 15-min default matches USGS' ~15-min cadence
+      (min 15, configurable); the stats envelope refreshes only ~monthly.
+- [ ] ❌ **brands** — needs a logo/icon PR to
+      [home-assistant/brands](https://github.com/home-assistant/brands) for the
+      `usgs_streamflow` domain.
+- [x] ✅ **common-modules** — logic lives in `coordinator.py`, `client.py`,
+      `stats_coordinator.py`, `streamflow_stats.py`. (A shared `entity.py` base
+      would tidy the repeated `DeviceInfo`/`unique_id` wiring — nice-to-have.)
+- [ ] ⚠️ **config-flow-test-coverage** — options flow and backend selection are
+      tested, but full step coverage (user/select_site, error paths, unique-id
+      abort) on the HA harness is not yet in place.
+- [x] ✅ **config-flow** — UI setup; `data` holds the site, `options` hold
+      settings; `strings.json` provides `data_description` for each field.
+- [x] ✅ **dependency-transparency** — only HA-provided libs (aiohttp) are used.
+- [x] ➖ **docs-actions** — no actions (exempt).
+- [x] ✅ **docs-high-level-description** — README opening + Features.
+- [x] ✅ **docs-installation-instructions** — README HACS + manual install.
+- [ ] ❌ **docs-removal-instructions** — add an explicit "How to remove" section
+      to the README.
+- [x] ✅ **entity-event-setup** — all entities are `CoordinatorEntity`
+      subclasses; subscriptions happen through the coordinator lifecycle.
+- [x] ✅ **entity-unique-id** — every entity sets a stable `unique_id`.
+- [x] ✅ **has-entity-name** — `_attr_has_entity_name = True` throughout.
+- [ ] ❌ **runtime-data** — currently stores the coordinators in
+      `hass.data[DOMAIN][entry.entry_id]`. Migrate to a typed
+      `entry.runtime_data` (`type UsgsConfigEntry = ConfigEntry[UsgsRuntimeData]`).
+- [x] ✅ **test-before-configure** — the config flow performs a live site search
+      before creating the entry, surfacing `cannot_connect` on failure.
+- [x] ✅ **test-before-setup** — `async_config_entry_first_refresh()` raises
+      `ConfigEntryNotReady` when the first poll fails. *(See reauth for
+      distinguishing auth failures.)*
+- [x] ✅ **unique-config-entry** — `async_set_unique_id("usgs_<site>")` +
+      `_abort_if_unique_id_configured()` prevents duplicate gauges.
+
+---
+
+## Silver
+
+- [x] ➖ **action-exceptions** — no actions (exempt).
+- [x] ✅ **config-entry-unloading** — `async_unload_entry` unloads the sensor
+      platform and pops state; the stats→source listener is torn down via
+      `entry.async_on_unload(...)`.
+- [x] ✅ **docs-configuration-parameters** — README options table +
+      `data_description` strings.
+- [x] ✅ **docs-installation-parameters** — search term, site, and API key are
+      documented in setup docs.
+- [x] ✅ **entity-unavailable** — sensors implement `available`; offline/seasonal
+      detection and "no envelope / no reading yet" all resolve to unavailable.
+- [x] ✅ **integration-owner** — `codeowners: ["@yieldhog"]`.
+- [x] ⚠️ **log-when-unavailable** — provided by `DataUpdateCoordinator` (logs the
+      first failure, suppresses repeats, logs recovery). Confirm this is
+      sufficient for the stats coordinator too.
+- [ ] ❌ **parallel-updates** — declare `PARALLEL_UPDATES = 0` in `sensor.py`
+      (read-only, coordinator-driven — no device write serialization needed).
+- [ ] ❌ **reauthentication-flow** — the Modern backend's api.data.gov key can be
+      wrong/expired. Add `async_step_reauth`, and map HTTP 401/403 to
+      `ConfigEntryAuthFailed` so a bad key prompts re-entry instead of retrying
+      forever. *(Legacy backend is unauthenticated — reauth applies only when the
+      Modern backend is selected.)*
+- [ ] ⚠️ **test-coverage** — strong logic tests exist, but core requires measured
+      ≥95% across all modules on the HA test framework (see structural work).
+
+---
+
+## Gold
+
+- [x] ✅ **devices** — each gauge is a device via `DeviceInfo`.
+- [ ] ❌ **diagnostics** — add `diagnostics.py` (dump config/options with the API
+      key redacted, coordinator data, known params, envelope metadata).
+- [x] ➖ **discovery** — USGS gauges aren't network-discoverable; the user
+      searches and selects a site (exempt).
+- [x] ➖ **discovery-update-info** — no discovery (exempt).
+- [x] ✅ **docs-data-update** — README "How it works" + "Data sources" explain
+      polling and the cached envelope.
+- [x] ✅ **docs-examples** — README "Automation examples".
+- [ ] ⚠️ **docs-known-limitations** — limitations are noted in place (tidal
+      noise, daily-stage rarity, ~5-year minimum, provisional data); consolidate
+      into one "Known limitations" section.
+- [x] ✅ **docs-supported-devices** — supported site types / parameters are
+      described.
+- [x] ✅ **docs-supported-functions** — every sensor is documented.
+- [x] ✅ **docs-troubleshooting** — README "Troubleshooting".
+- [ ] ⚠️ **docs-use-cases** — implied throughout; add an explicit "use cases"
+      framing (flood watch, drought/percent-of-normal, well monitoring).
+- [x] ➖ **dynamic-devices** — one device per config entry; nothing to add
+      dynamically (exempt).
+- [ ] ⚠️ **entity-category** — consider `EntityCategory.DIAGNOSTIC` for Station
+      Status (and possibly the rate/trend sensors).
+- [x] ✅ **entity-device-class** — device classes used where they exist
+      (temperature, humidity, distance, speed, pH, wind speed, enum for
+      trend/condition); custom units (cfs, FNU…) correctly carry none.
+- [ ] ⚠️ **entity-disabled-by-default** — all reported parameters are enabled;
+      consider disabling the less-common water-quality entities by default.
+- [ ] ❌ **entity-translations** — entity names are English `_attr_name` /
+      description names. Move to `translation_key` + entity translations in
+      `strings.json`.
+- [ ] ❌ **exception-translations** — `UpdateFailed` / flow errors are English
+      f-strings; move user-facing messages to translatable keys.
+- [ ] ❌ **icon-translations** — icons are set via `_attr_icon` / descriptions;
+      migrate to `icons.json` icon translations (incl. state-based trend/
+      condition icons).
+- [ ] ❌ **reconfiguration-flow** — add `async_step_reconfigure` (e.g. to change
+      the site or backend without deleting the entry).
+- [ ] ⚠️ **repair-issues** — optional but valuable: raise a repair issue for
+      "using rate-limited DEMO_KEY" or "gauge decommissioned / no longer
+      reporting".
+- [x] ➖ **stale-devices** — single device per entry, removed on unload (exempt).
+
+---
+
+## Platinum
+
+- [x] ✅ **async-dependency** — no sync dependency; all I/O is async (aiohttp).
+- [x] ✅ **inject-websession** — uses `async_get_clientsession(hass)` rather than
+      creating its own session.
+- [ ] ⚠️ **strict-typing** — code is type-annotated but not yet verified under
+      HA's strict-typing mypy config; add the domain to `.strict-typing` and make
+      it pass.
+
+---
+
+## Error handling & robustness (already addressed)
+
+Not IQS rules by name, but core review scrutinizes these — current state:
+
+- ✅ All USGS calls raise typed `UsgsClientError` subclasses; the coordinator
+      translates them to `UpdateFailed` (→ `ConfigEntryNotReady` on first poll).
+- ✅ The percent-of-normal envelope fetch is best-effort: a failure is logged and
+      never blocks setup; the cached envelope is kept and retried later.
+- ✅ Rate/trend warm-start (`_seed_history`) is fully non-fatal — it runs outside
+      the poll's error handling, so it catches everything and can never fail a
+      poll.
+- ✅ Cache read/write (`Store`) failures are caught: a bad read rebuilds, a failed
+      write keeps the in-memory envelope.
+- ✅ Missing-data sentinels (`-999999`), non-numeric values, and unparseable
+      timestamps are dropped rather than surfaced.
+- ⏳ Open: distinguish auth failures (401/403) → `ConfigEntryAuthFailed`
+      (paired with the reauth flow above).
