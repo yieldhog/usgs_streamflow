@@ -58,6 +58,10 @@ class TestStaleness(unittest.TestCase):
                           (NOW - timedelta(days=99)).isoformat(), {})
         self.assertTrue(_is_stale(env, NOW))
 
+    def test_unparseable_built_is_stale(self):
+        env = st.Envelope("00060", "00003", 0, 30, None, None, "garbage", {})
+        self.assertTrue(_is_stale(env, NOW))
+
 
 class TestEnsureAndCompute(unittest.TestCase):
     def setUp(self):
@@ -120,6 +124,32 @@ class TestEnsureAndCompute(unittest.TestCase):
         coord = self._coord(client, source, {"00060": StatsParamConfig(invert=False)})
         run(coord._ensure_envelopes())
         self.assertEqual(coord._compute(), {})
+
+    def test_load_cache_ignores_corrupt_entry(self):
+        source = fake_source({"00060": 1600.0}, {"00060": st_dt("2026-06-11")})
+        coord = self._coord(FakeClient([]), source,
+                            {"00060": StatsParamConfig(invert=False)})
+
+        class Store:
+            async def async_load(self):
+                return {"envelopes": {"00060": {"bad": "shape"}}}
+
+        coord._store = Store()
+        run(coord._load_cache())  # from_dict raises -> entry dropped, no crash
+        self.assertNotIn("00060", coord.envelopes)
+
+    def test_load_cache_no_data(self):
+        source = fake_source({}, {})
+        coord = self._coord(FakeClient([]), source,
+                            {"00060": StatsParamConfig(invert=False)})
+
+        class Store:
+            async def async_load(self):
+                return None
+
+        coord._store = Store()
+        run(coord._load_cache())
+        self.assertEqual(coord.envelopes, {})
 
     def test_save_cache_failure_is_non_fatal(self):
         client = FakeClient(thirty_years())
