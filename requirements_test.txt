@@ -5,3 +5,4 @@
 # pytest-homeassistant-custom-component pins a compatible Home Assistant + pytest
 # stack; let it resolve the versions.
 pytest-homeassistant-custom-component
+pytest-cov
