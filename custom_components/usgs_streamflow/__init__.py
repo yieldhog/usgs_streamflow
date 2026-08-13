@@ -1,6 +1,8 @@
 """USGS Streamflow integration."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -15,7 +17,6 @@ from .const import (
     CONF_SITE_ID,
     CONF_SITE_NAME,
     DEFAULT_SCAN_INTERVAL_MINUTES,
-    DOMAIN,
     STATS_PARAMS,
     SUPPORTED_PARAMETERS,
 )
@@ -25,7 +26,20 @@ from .stats_coordinator import USGSStatsCoordinator
 PLATFORMS = ["sensor"]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+@dataclass
+class UsgsRuntimeData:
+    """Runtime objects stored on the config entry (see ``runtime-data`` rule)."""
+
+    coordinator: USGSStreamflowCoordinator
+    stats: USGSStatsCoordinator | None
+
+
+# The config entry carries its runtime objects on ``entry.runtime_data`` instead
+# of a hass.data table keyed by entry id.
+UsgsConfigEntry = ConfigEntry[UsgsRuntimeData]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool:
     """Set up USGS Streamflow from a config entry."""
     interval = int(
         entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
@@ -70,10 +84,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await stats_coordinator.async_refresh()
             entry.async_on_unload(stats_coordinator.attach_source())
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        "coordinator": coordinator,
-        "stats": stats_coordinator,
-    }
+    entry.runtime_data = UsgsRuntimeData(
+        coordinator=coordinator, stats=stats_coordinator
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Reload the entry when its options change (scan interval / parameter set).
@@ -81,14 +94,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_update_listener(hass: HomeAssistant, entry: UsgsConfigEntry) -> None:
     """Reload the config entry when options are updated."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

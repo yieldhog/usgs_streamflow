@@ -134,6 +134,13 @@ class _ConfigFlow:
         super().__init_subclass__()
 
 
+class _ConfigEntry:
+    """Stand-in for ConfigEntry; subscriptable so ConfigEntry[RuntimeData] works."""
+
+    def __class_getitem__(cls, item):
+        return cls
+
+
 class _OptionsFlow:
     def async_create_entry(self, *, title, data):
         return {"type": "create", "title": title, "data": data}
@@ -261,7 +268,7 @@ def install_stubs() -> None:
         "homeassistant.config_entries",
         ConfigFlow=_ConfigFlow,
         OptionsFlow=_OptionsFlow,
-        ConfigEntry=type("ConfigEntry", (), {}),
+        ConfigEntry=_ConfigEntry,
         FlowResult=dict,
     )
 

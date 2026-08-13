@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -65,6 +65,9 @@ from .streamflow_stats import (
     CONDITION_ORDER,
     StatsResult,
 )
+
+if TYPE_CHECKING:
+    from . import UsgsConfigEntry
 
 # CFS (cubic feet per second) is not yet a named HA unit constant; use the
 # canonical string directly.  HA will store/display it correctly; unit
@@ -432,13 +435,13 @@ def _make_device_info(site_id: str, site_name: str) -> DeviceInfo:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: UsgsConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up USGS Streamflow sensors for a config entry."""
-    store = hass.data[DOMAIN][entry.entry_id]
-    coordinator: USGSStreamflowCoordinator = store["coordinator"]
-    stats_coordinator: USGSStatsCoordinator | None = store["stats"]
+    data = entry.runtime_data
+    coordinator: USGSStreamflowCoordinator = data.coordinator
+    stats_coordinator: USGSStatsCoordinator | None = data.stats
 
     entities: list[SensorEntity] = [
         # Station Status is always present so users can see online/offline
