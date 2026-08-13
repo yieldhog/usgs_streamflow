@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+# The Home Assistant harness suite. The legacy dependency-free suite in tests/
+# is run separately via `python -m unittest discover -s tests -t .` and is not
+# collected by pytest (it installs fake `homeassistant` modules that would
+# conflict with the real package the harness suite needs).
+testpaths = ["tests_ha"]
+asyncio_mode = "auto"
+pythonpath = ["."]

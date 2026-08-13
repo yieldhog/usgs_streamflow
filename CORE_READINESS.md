@@ -10,12 +10,12 @@ for each tier.
 
 ## Current standing
 
-- **Bronze:** code-complete. Remaining are outside the Python code: `brands`
-  (a logo PR to home-assistant/brands) and full `config-flow-test-coverage` on
-  the HA test harness.
+- **Bronze:** code-complete. `config-flow-test-coverage` tests are written on the
+  HA harness (`tests_ha/`) and await a first `pytest` run; the only non-code item
+  left is `brands` (a logo PR to home-assistant/brands).
 - **Silver:** `parallel-updates` and `reauthentication-flow` done. Remaining:
-  measured ≥95% `test-coverage` on the HA test framework (`pytest-
-  homeassistant-custom-component`).
+  run the harness suite under `pytest-homeassistant-custom-component` and confirm
+  measured ≥95% `test-coverage`.
 - **Gold / Platinum:** several documentation rules already met; the technical
   rules (translations, diagnostics, reconfigure, strict typing) are open.
 
@@ -32,10 +32,13 @@ tier is fully green (Bronze once brands + harness config-flow tests land).
       are versioned by HA itself).
 - [ ] ❌ Add `"quality_scale": "bronze"` (or higher) to `manifest.json` once the
       tier is met.
-- [ ] ⚠️ Port the test suite from the hand-rolled stubs in `tests/_ha.py` to
-      `pytest-homeassistant-custom-component` (the core test framework). The
-      current dependency-free suite (97 tests) is good logic coverage but core
-      CI requires the real HA fixtures + measured coverage.
+- [ ] ⚠️ Port the test suite to `pytest-homeassistant-custom-component` (the core
+      test framework). **In progress:** an HA-harness suite now lives in
+      `tests_ha/` (config-flow, reauth, setup/unload/reauth lifecycle) alongside
+      the dependency-free `tests/` logic suite. Run it with
+      `pip install -r requirements_test.txt && pytest`. These harness tests were
+      authored without a local HA install, so the first run may need minor
+      fixture tweaks; measure coverage there and close the gap to ≥95%.
 - [ ] ✅ No third-party runtime requirements (`requirements: []`) — nothing to
       vendor or vet.
 
@@ -52,9 +55,10 @@ tier is fully green (Bronze once brands + harness config-flow tests land).
 - [x] ✅ **common-modules** — logic lives in `coordinator.py`, `client.py`,
       `stats_coordinator.py`, `streamflow_stats.py`. (A shared `entity.py` base
       would tidy the repeated `DeviceInfo`/`unique_id` wiring — nice-to-have.)
-- [ ] ⚠️ **config-flow-test-coverage** — options flow and backend selection are
-      tested, but full step coverage (user/select_site, error paths, unique-id
-      abort) on the HA harness is not yet in place.
+- [ ] ⚠️ **config-flow-test-coverage** — HA-harness config-flow tests added in
+      `tests_ha/test_config_flow.py` (user happy path, no-results, cannot_connect,
+      name-search-needs-state, duplicate abort, reauth invalid+valid, options
+      flow). Pending first `pytest` run to confirm/measure.
 - [x] ✅ **config-flow** — UI setup; `data` holds the site, `options` hold
       settings; `strings.json` provides `data_description` for each field.
 - [x] ✅ **dependency-transparency** — only HA-provided libs (aiohttp) are used.
@@ -101,8 +105,9 @@ tier is fully green (Bronze once brands + harness config-flow tests land).
       `ConfigEntryAuthFailed`, and the config flow's `async_step_reauth` /
       `async_step_reauth_confirm` validate and store a new key, then reload.
       *(Legacy is unauthenticated, so its 401/403 stays a retryable failure.)*
-- [ ] ⚠️ **test-coverage** — strong logic tests exist, but core requires measured
-      ≥95% across all modules on the HA test framework (see structural work).
+- [ ] ⚠️ **test-coverage** — strong logic tests (`tests/`) plus a new HA-harness
+      suite (`tests_ha/`). Still need to run under `pytest-homeassistant-custom-
+      component`, measure coverage, and close to ≥95% across all modules.
 
 ---
 
