@@ -37,4 +37,5 @@ jobs:
           coverage run -m unittest discover -s tests -t .
           coverage run -a -m pytest tests_ha/
           coverage report --show-missing \
-            --include='custom_components/usgs_streamflow/*'
+            --include='custom_components/usgs_streamflow/*' \
+            --fail-under=95

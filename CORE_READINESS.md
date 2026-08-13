@@ -10,12 +10,10 @@ for each tier.
 
 ## Current standing
 
-- **Bronze:** code-complete. `config-flow-test-coverage` tests are written on the
-  HA harness (`tests_ha/`) and await a first `pytest` run; the only non-code item
-  left is `brands` (a logo PR to home-assistant/brands).
-- **Silver:** `parallel-updates` and `reauthentication-flow` done. Remaining:
-  run the harness suite under `pytest-homeassistant-custom-component` and confirm
-  measured ≥95% `test-coverage`.
+- **Bronze:** code-complete and CI-verified (harness suite green). The only
+  non-code item left is `brands` (a logo PR to home-assistant/brands).
+- **Silver:** ✅ complete — `parallel-updates`, `reauthentication-flow`, and
+  `test-coverage` (**96% combined**, enforced by `--fail-under=95` in CI).
 - **Gold:** `diagnostics`, `entity-category`, `devices`, and all doc rules done;
   `reconfiguration-flow`/`dynamic-devices`/`discovery`/`stale-devices` are N/A.
   Open: the **translations trio** (`entity-translations`, `icon-translations`,
@@ -63,10 +61,10 @@ tier is fully green (Bronze once brands + harness config-flow tests land).
 - [x] ✅ **common-modules** — logic lives in `coordinator.py`, `client.py`,
       `stats_coordinator.py`, `streamflow_stats.py`. (A shared `entity.py` base
       would tidy the repeated `DeviceInfo`/`unique_id` wiring — nice-to-have.)
-- [ ] ⚠️ **config-flow-test-coverage** — HA-harness config-flow tests added in
+- [x] ✅ **config-flow-test-coverage** — HA-harness config-flow tests in
       `tests_ha/test_config_flow.py` (user happy path, no-results, cannot_connect,
       name-search-needs-state, duplicate abort, reauth invalid+valid, options
-      flow). Pending first `pytest` run to confirm/measure.
+      flow), green in CI.
 - [x] ✅ **config-flow** — UI setup; `data` holds the site, `options` hold
       settings; `strings.json` provides `data_description` for each field.
 - [x] ✅ **dependency-transparency** — only HA-provided libs (aiohttp) are used.
@@ -113,9 +111,9 @@ tier is fully green (Bronze once brands + harness config-flow tests land).
       `ConfigEntryAuthFailed`, and the config flow's `async_step_reauth` /
       `async_step_reauth_confirm` validate and store a new key, then reload.
       *(Legacy is unauthenticated, so its 401/403 stays a retryable failure.)*
-- [ ] ⚠️ **test-coverage** — strong logic tests (`tests/`) plus a new HA-harness
-      suite (`tests_ha/`). Still need to run under `pytest-homeassistant-custom-
-      component`, measure coverage, and close to ≥95% across all modules.
+- [x] ✅ **test-coverage** — **96% combined** across both suites in CI
+      (dependency-free `tests/` + HA-harness `tests_ha/`), enforced by
+      `coverage --fail-under=95`.
 
 ---
 
