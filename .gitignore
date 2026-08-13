@@ -2,3 +2,10 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+
+# Test / coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
