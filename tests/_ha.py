@@ -287,6 +287,7 @@ def install_stubs() -> None:
         "homeassistant.const",
         DEGREE="°",
         PERCENTAGE="%",
+        EntityCategory=_Attr,
         UnitOfLength=_Attr,
         UnitOfTemperature=_Attr,
         UnitOfSpeed=_Attr,

@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     DEGREE,
     PERCENTAGE,
+    EntityCategory,
     UnitOfLength,
     UnitOfSpeed,
     UnitOfTemperature,
@@ -534,6 +535,7 @@ class USGSStationStatusSensor(
     _attr_has_entity_name = True
     _attr_icon = "mdi:gauge"
     _attr_name = "Station Status"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
