@@ -47,7 +47,11 @@ class TestSensorCoverage(unittest.TestCase):
     def test_descriptions_well_formed(self):
         for d in self.descs:
             with self.subTest(key=d.key):
-                self.assertTrue(d.name)
+                # Names come from translations, keyed by `key` (used as the
+                # entity translation_key), so descriptions carry no `name`/`icon`.
+                self.assertTrue(d.key)
+                self.assertIsNone(d.name)
+                self.assertIsNone(d.icon)
                 self.assertIsNotNone(d.state_class)
                 self.assertTrue(
                     d.native_unit_of_measurement is not None or d.device_class is not None,

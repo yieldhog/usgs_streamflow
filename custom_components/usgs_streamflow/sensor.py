@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     DEGREE,
     PERCENTAGE,
+    EntityCategory,
     UnitOfLength,
     UnitOfSpeed,
     UnitOfTemperature,
@@ -56,15 +57,14 @@ from .const import (
 )
 from .coordinator import USGSStreamflowCoordinator
 from .stats_coordinator import USGSStatsCoordinator
-from .streamflow_stats import (
-    CONDITION_ABOVE,
-    CONDITION_BELOW,
-    CONDITION_MUCH_ABOVE,
-    CONDITION_MUCH_BELOW,
-    CONDITION_NORMAL,
-    CONDITION_ORDER,
-    StatsResult,
-)
+from .streamflow_stats import CONDITION_ORDER, StatsResult
+
+if TYPE_CHECKING:
+    from . import UsgsConfigEntry
+
+# All sensors are read-only and driven by the DataUpdateCoordinator (no per-entity
+# polling or device writes), so no update serialization is needed.
+PARALLEL_UPDATES = 0
 
 # CFS (cubic feet per second) is not yet a named HA unit constant; use the
 # canonical string directly.  HA will store/display it correctly; unit
@@ -77,25 +77,22 @@ _UNIT_FEET_PER_HOUR = "ft/h"
 _UNIT_CFS_PER_HOUR = "ft³/s/h"
 
 _TREND_OPTIONS = ["rising", "falling", "steady"]
-_TREND_ICONS = {
-    "rising": "mdi:trending-up",
-    "falling": "mdi:trending-down",
-    "steady": "mdi:trending-neutral",
-}
 
-# Icons for the Condition sensor, one per WaterWatch class.
-_CONDITION_ICONS = {
-    CONDITION_MUCH_BELOW: "mdi:water-alert",
-    CONDITION_BELOW: "mdi:water-minus",
-    CONDITION_NORMAL: "mdi:water-check",
-    CONDITION_ABOVE: "mdi:water-plus",
-    CONDITION_MUCH_ABOVE: "mdi:water-alert",
+# Maps a stats parameter to its translation-key prefix (shared by the
+# Condition / Percentile / % of Normal sensors and the icons/strings files).
+_STATS_TRANSLATION_BASE = {
+    PARAM_DISCHARGE: "discharge",
+    PARAM_GAUGE_HEIGHT: "gauge_height",
+    PARAM_GW_DEPTH: "gw_depth",
 }
 
 
 @dataclass(frozen=True, kw_only=True)
 class DerivedSensorConfig:
     """Configuration for a parameter's rate-of-change and trend sensors.
+
+    ``rate_key`` / ``trend_key`` double as the entities' ``translation_key`` (names
+    live in strings.json, icons in icons.json).
 
     trend_abs_deadband / trend_rel_deadband define the dead zone within which a
     rate is reported as "steady".  The effective deadband is
@@ -106,12 +103,9 @@ class DerivedSensorConfig:
 
     param_cd: str
     rate_key: str
-    rate_name: str
     rate_unit: str
-    rate_icon: str
     rate_precision: int
     trend_key: str
-    trend_name: str
     trend_abs_deadband: float
     trend_rel_deadband: float
 
@@ -126,36 +120,27 @@ DERIVED_SENSORS: tuple[DerivedSensorConfig, ...] = (
     DerivedSensorConfig(
         param_cd=PARAM_GAUGE_HEIGHT,
         rate_key="gauge_height_rate",
-        rate_name="Gauge Height Rate",
         rate_unit=_UNIT_FEET_PER_HOUR,
-        rate_icon="mdi:waves-arrow-up",
         rate_precision=3,
         trend_key="gauge_height_trend",
-        trend_name="Gauge Height Trend",
         trend_abs_deadband=0.02,   # ft/h
         trend_rel_deadband=0.0,    # datum-relative; absolute only
     ),
     DerivedSensorConfig(
         param_cd=PARAM_DISCHARGE,
         rate_key="discharge_rate",
-        rate_name="Discharge Rate",
         rate_unit=_UNIT_CFS_PER_HOUR,
-        rate_icon="mdi:waves-arrow-right",
         rate_precision=2,
         trend_key="discharge_trend",
-        trend_name="Discharge Trend",
         trend_abs_deadband=0.5,    # cfs/h floor for tiny streams
         trend_rel_deadband=0.03,   # 3%/h scales to large rivers
     ),
     DerivedSensorConfig(
         param_cd=PARAM_GW_DEPTH,
         rate_key="gw_depth_rate",
-        rate_name="Depth to Water Level Rate",
         rate_unit=_UNIT_FEET_PER_HOUR,
-        rate_icon="mdi:arrow-expand-vertical",
         rate_precision=3,
         trend_key="gw_depth_trend",
-        trend_name="Depth to Water Level Trend",
         trend_abs_deadband=0.02,   # ft/h
         trend_rel_deadband=0.0,
     ),
@@ -216,29 +201,26 @@ class USGSSensorDescription(SensorEntityDescription):
     param_cd: str
 
 
+# Entity names come from translations (strings.json, keyed by ``key``) and icons
+# from icons.json, so descriptions carry no ``name``/``icon``.
 SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="gauge_height",
         param_cd=PARAM_GAUGE_HEIGHT,
-        name="Gauge Height",
         native_unit_of_measurement=UnitOfLength.FEET,
-        icon="mdi:waves",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
     USGSSensorDescription(
         key="discharge",
         param_cd=PARAM_DISCHARGE,
-        name="Discharge",
         native_unit_of_measurement=_UNIT_CFS,
-        icon="mdi:waves-arrow-right",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
     ),
     USGSSensorDescription(
         key="water_temp",
         param_cd=PARAM_WATER_TEMP,
-        name="Water Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
@@ -247,34 +229,27 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="specific_conductance",
         param_cd=PARAM_SPECIFIC_CONDUCTANCE,
-        name="Specific Conductance",
         native_unit_of_measurement="µS/cm",
-        icon="mdi:flash",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
     ),
     USGSSensorDescription(
         key="dissolved_oxygen",
         param_cd=PARAM_DISSOLVED_OXYGEN,
-        name="Dissolved Oxygen",
         native_unit_of_measurement="mg/L",
-        icon="mdi:gas-cylinder",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
     USGSSensorDescription(
         key="do_pct_saturation",
         param_cd=PARAM_DO_PCT_SAT,
-        name="Dissolved Oxygen (% Saturation)",
         native_unit_of_measurement=PERCENTAGE,
-        icon="mdi:percent",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
     ),
     USGSSensorDescription(
         key="ph",
         param_cd=PARAM_PH,
-        name="pH",
         device_class=SensorDeviceClass.PH,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
@@ -282,30 +257,24 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="turbidity",
         param_cd=PARAM_TURBIDITY,
-        name="Turbidity",
         native_unit_of_measurement="FNU",
-        icon="mdi:water-opacity",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
     ),
     USGSSensorDescription(
         key="precipitation",
         param_cd=PARAM_PRECIPITATION,
-        name="Precipitation",
         # USGS 00045 is incremental precip per reporting interval; exposed as
         # a plain measurement in inches, not an accumulating total.
         native_unit_of_measurement="in",
-        icon="mdi:weather-rainy",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
     USGSSensorDescription(
         key="gw_depth",
         param_cd=PARAM_GW_DEPTH,
-        name="Depth to Water Level",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.FEET,
-        icon="mdi:water-well",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
@@ -313,7 +282,6 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="air_temp",
         param_cd=PARAM_AIR_TEMP,
-        name="Air Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
@@ -322,7 +290,6 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="relative_humidity",
         param_cd=PARAM_REL_HUMIDITY,
-        name="Relative Humidity",
         device_class=SensorDeviceClass.HUMIDITY,
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -331,7 +298,6 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="wind_speed",
         param_cd=PARAM_WIND_SPEED,
-        name="Wind Speed",
         device_class=SensorDeviceClass.WIND_SPEED,
         native_unit_of_measurement=UnitOfSpeed.MILES_PER_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
@@ -340,9 +306,7 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="wind_direction",
         param_cd=PARAM_WIND_DIR,
-        name="Wind Direction",
         native_unit_of_measurement=DEGREE,
-        icon="mdi:compass-outline",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
     ),
@@ -350,27 +314,21 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="salinity",
         param_cd=PARAM_SALINITY,
-        name="Salinity",
         native_unit_of_measurement="ppt",
-        icon="mdi:shaker-outline",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
     USGSSensorDescription(
         key="nitrate",
         param_cd=PARAM_NITRATE,
-        name="Nitrate",
         native_unit_of_measurement="mg/L",
-        icon="mdi:flask-outline",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
     USGSSensorDescription(
         key="chlorophyll",
         param_cd=PARAM_CHLOROPHYLL,
-        name="Chlorophyll",
         native_unit_of_measurement="RFU",
-        icon="mdi:leaf",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
@@ -378,39 +336,31 @@ SENSOR_DESCRIPTIONS: tuple[USGSSensorDescription, ...] = (
     USGSSensorDescription(
         key="reservoir_elevation",
         param_cd=PARAM_RESERVOIR_ELEV,
-        name="Reservoir Elevation",
         # An elevation above a datum, like gauge height — kept as plain feet
         # (no device class) so it isn't unit-converted as a travel distance.
         native_unit_of_measurement=UnitOfLength.FEET,
-        icon="mdi:image-filter-hdr",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
     USGSSensorDescription(
         key="reservoir_storage",
         param_cd=PARAM_RESERVOIR_STORAGE,
-        name="Reservoir Storage",
         native_unit_of_measurement="acre-ft",
-        icon="mdi:cup-water",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
     ),
     USGSSensorDescription(
         key="discharge_tidally_filtered",
         param_cd=PARAM_DISCHARGE_TIDAL,
-        name="Discharge (Tidally Filtered)",
         native_unit_of_measurement=_UNIT_CFS,
-        icon="mdi:waves-arrow-right",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
     ),
     USGSSensorDescription(
         key="water_velocity",
         param_cd=PARAM_VELOCITY,
-        name="Water Velocity",
         device_class=SensorDeviceClass.SPEED,
         native_unit_of_measurement=UnitOfSpeed.FEET_PER_SECOND,
-        icon="mdi:speedometer",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
     ),
@@ -432,13 +382,13 @@ def _make_device_info(site_id: str, site_name: str) -> DeviceInfo:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: UsgsConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up USGS Streamflow sensors for a config entry."""
-    store = hass.data[DOMAIN][entry.entry_id]
-    coordinator: USGSStreamflowCoordinator = store["coordinator"]
-    stats_coordinator: USGSStatsCoordinator | None = store["stats"]
+    data = entry.runtime_data
+    coordinator: USGSStreamflowCoordinator = data.coordinator
+    stats_coordinator: USGSStatsCoordinator | None = data.stats
 
     entities: list[SensorEntity] = [
         # Station Status is always present so users can see online/offline
@@ -500,20 +450,17 @@ async def async_setup_entry(
                 and param_cd in enabled
                 and param_cd in stats_coordinator.envelopes
             ):
-                label = SUPPORTED_PARAMETERS.get(param_cd, param_cd)
                 entities.append(
-                    USGSConditionSensor(stats_coordinator, entry, param_cd, label)
+                    USGSConditionSensor(stats_coordinator, entry, param_cd)
                 )
                 entities.append(
-                    USGSPercentileSensor(stats_coordinator, entry, param_cd, label)
+                    USGSPercentileSensor(stats_coordinator, entry, param_cd)
                 )
                 # % of Normal only where a ratio to the median is meaningful
                 # (see StatsParamConfig — excluded for datum-relative gauge height).
                 if cfg.percent_of_normal:
                     entities.append(
-                        USGSPercentOfNormalSensor(
-                            stats_coordinator, entry, param_cd, label
-                        )
+                        USGSPercentOfNormalSensor(stats_coordinator, entry, param_cd)
                     )
 
     async_add_entities(entities)
@@ -525,8 +472,8 @@ class USGSStationStatusSensor(
     """Reports whether the station is currently active or seasonally offline."""
 
     _attr_has_entity_name = True
-    _attr_icon = "mdi:gauge"
-    _attr_name = "Station Status"
+    _attr_translation_key = "station_status"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -573,6 +520,7 @@ class USGSStreamSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntit
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
+        self._attr_translation_key = description.key
         site_id = entry.data[CONF_SITE_ID]
         site_name = entry.data[CONF_SITE_NAME]
         self._attr_unique_id = f"usgs_{site_id}_{description.param_cd}"
@@ -652,9 +600,8 @@ class USGSRateSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntity)
         self._config = config
         site_id = entry.data[CONF_SITE_ID]
         site_name = entry.data[CONF_SITE_NAME]
-        self._attr_name = config.rate_name
+        self._attr_translation_key = config.rate_key
         self._attr_native_unit_of_measurement = config.rate_unit
-        self._attr_icon = config.rate_icon
         self._attr_suggested_display_precision = config.rate_precision
         self._attr_unique_id = f"usgs_{site_id}_{config.param_cd}_rate"
         self._attr_device_info = _make_device_info(site_id, site_name)
@@ -702,7 +649,7 @@ class USGSTrendSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntity
         self._config = config
         site_id = entry.data[CONF_SITE_ID]
         site_name = entry.data[CONF_SITE_NAME]
-        self._attr_name = config.trend_name
+        self._attr_translation_key = config.trend_key
         self._attr_unique_id = f"usgs_{site_id}_{config.param_cd}_trend"
         self._attr_device_info = _make_device_info(site_id, site_name)
 
@@ -722,10 +669,6 @@ class USGSTrendSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntity
             self._config.trend_abs_deadband,
             self._config.trend_rel_deadband,
         )
-
-    @property
-    def icon(self) -> str:
-        return _TREND_ICONS.get(self.native_value, "mdi:trending-neutral")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -761,13 +704,14 @@ class _USGSStatsSensorBase(
         coordinator: USGSStatsCoordinator,
         entry: ConfigEntry,
         param_cd: str,
-        label: str,
         suffix: str,
     ) -> None:
         super().__init__(coordinator)
         self._param_cd = param_cd
         site_id = entry.data[CONF_SITE_ID]
         site_name = entry.data[CONF_SITE_NAME]
+        base = _STATS_TRANSLATION_BASE.get(param_cd, param_cd)
+        self._attr_translation_key = f"{base}_{suffix}"
         self._attr_unique_id = f"usgs_{site_id}_{param_cd}_{suffix}"
         self._attr_device_info = _make_device_info(site_id, site_name)
 
@@ -807,21 +751,13 @@ class USGSConditionSensor(_USGSStatsSensorBase):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = list(CONDITION_ORDER)
 
-    def __init__(self, coordinator, entry, param_cd, label) -> None:
-        super().__init__(coordinator, entry, param_cd, label, "condition")
-        self._attr_name = f"{label} Condition"
+    def __init__(self, coordinator, entry, param_cd) -> None:
+        super().__init__(coordinator, entry, param_cd, "condition")
 
     @property
     def native_value(self) -> str | None:
         result = self._result()
         return result.condition if result else None
-
-    @property
-    def icon(self) -> str:
-        result = self._result()
-        if result is None:
-            return "mdi:water-percent"
-        return _CONDITION_ICONS.get(result.condition, "mdi:water-percent")
 
 
 class USGSPercentileSensor(_USGSStatsSensorBase):
@@ -829,12 +765,10 @@ class USGSPercentileSensor(_USGSStatsSensorBase):
 
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:sort-numeric-ascending"
     _attr_suggested_display_precision = 0
 
-    def __init__(self, coordinator, entry, param_cd, label) -> None:
-        super().__init__(coordinator, entry, param_cd, label, "percentile")
-        self._attr_name = f"{label} Percentile"
+    def __init__(self, coordinator, entry, param_cd) -> None:
+        super().__init__(coordinator, entry, param_cd, "percentile")
 
     @property
     def native_value(self) -> float | None:
@@ -847,12 +781,10 @@ class USGSPercentOfNormalSensor(_USGSStatsSensorBase):
 
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:water-percent"
     _attr_suggested_display_precision = 0
 
-    def __init__(self, coordinator, entry, param_cd, label) -> None:
-        super().__init__(coordinator, entry, param_cd, label, "pct_of_normal")
-        self._attr_name = f"{label} % of Normal"
+    def __init__(self, coordinator, entry, param_cd) -> None:
+        super().__init__(coordinator, entry, param_cd, "pct_of_normal")
 
     @property
     def native_value(self) -> float | None:

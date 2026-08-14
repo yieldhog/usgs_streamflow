@@ -68,6 +68,14 @@ class TestPercentileOf(unittest.TestCase):
         self.assertEqual(st.percentile_of(anchors, 0.0), 0.0)
 
 
+class TestQuantile(unittest.TestCase):
+    def test_single_value(self):
+        self.assertEqual(st._quantile([5.0], 50), 5.0)
+
+    def test_interpolates(self):
+        self.assertAlmostEqual(st._quantile([0.0, 10.0], 25), 2.5)
+
+
 class TestClassify(unittest.TestCase):
     def test_streamflow_bands(self):
         self.assertEqual(st.classify(5)[0], st.CONDITION_MUCH_BELOW)

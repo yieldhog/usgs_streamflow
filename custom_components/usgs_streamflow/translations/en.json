@@ -21,19 +21,31 @@
           "api_key": "API key (optional)"
         },
         "data_description": {
-          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. The current data source doesn't require it — leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at {signup_url}."
+          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. The current data source doesn't require it \u2014 leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at {signup_url}."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update USGS API key",
+        "description": "The Modern (Water Data OGC API) backend rejected the api.data.gov key for this gauge. Enter a valid key to continue. Get a free key at {signup_url}.",
+        "data": {
+          "api_key": "API key"
+        },
+        "data_description": {
+          "api_key": "Your api.data.gov key for the Modern USGS Water Data OGC API."
         }
       }
     },
     "error": {
       "cannot_connect": "Could not reach the USGS API. Check your internet connection.",
+      "invalid_auth": "The USGS API rejected that key. Check the api.data.gov key and try again.",
       "no_sites_found": "No active stream gauges matched. Try a broader name or a different state code.",
       "search_required": "Please enter a stream name or site number.",
       "state_required_for_name_search": "A state code is required when searching by name (e.g. CO). To search nationwide, enter a site number directly instead.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This gauge station is already configured."
+      "already_configured": "This gauge station is already configured.",
+      "reauth_successful": "The API key was updated."
     }
   },
   "options": {
@@ -56,6 +68,174 @@
           "backend": "Which USGS API to poll. Legacy (WaterServices) is the stable default; Modern (Water Data OGC API) is the in-progress replacement and needs an API key. Switch one entry to Modern to compare it against Legacy. Changing this reloads the integration."
         }
       }
+    }
+  },
+  "issues": {
+    "demo_key": {
+      "title": "USGS Streamflow is using the shared demo API key",
+      "description": "This gauge polls the Modern (Water Data OGC API) backend with the shared, rate-limited api.data.gov demo key, so updates may be throttled. Get a free personal key at {signup_url} and set it in the integration's options to remove the limit."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "gauge_height": {
+        "name": "Gauge Height"
+      },
+      "discharge": {
+        "name": "Discharge"
+      },
+      "water_temp": {
+        "name": "Water Temperature"
+      },
+      "specific_conductance": {
+        "name": "Specific Conductance"
+      },
+      "dissolved_oxygen": {
+        "name": "Dissolved Oxygen"
+      },
+      "do_pct_saturation": {
+        "name": "Dissolved Oxygen (% Saturation)"
+      },
+      "ph": {
+        "name": "pH"
+      },
+      "turbidity": {
+        "name": "Turbidity"
+      },
+      "precipitation": {
+        "name": "Precipitation"
+      },
+      "gw_depth": {
+        "name": "Depth to Water Level"
+      },
+      "air_temp": {
+        "name": "Air Temperature"
+      },
+      "relative_humidity": {
+        "name": "Relative Humidity"
+      },
+      "wind_speed": {
+        "name": "Wind Speed"
+      },
+      "wind_direction": {
+        "name": "Wind Direction"
+      },
+      "salinity": {
+        "name": "Salinity"
+      },
+      "nitrate": {
+        "name": "Nitrate"
+      },
+      "chlorophyll": {
+        "name": "Chlorophyll"
+      },
+      "reservoir_elevation": {
+        "name": "Reservoir Elevation"
+      },
+      "reservoir_storage": {
+        "name": "Reservoir Storage"
+      },
+      "discharge_tidally_filtered": {
+        "name": "Discharge (Tidally Filtered)"
+      },
+      "water_velocity": {
+        "name": "Water Velocity"
+      },
+      "gauge_height_rate": {
+        "name": "Gauge Height Rate"
+      },
+      "discharge_rate": {
+        "name": "Discharge Rate"
+      },
+      "gw_depth_rate": {
+        "name": "Depth to Water Level Rate"
+      },
+      "gauge_height_trend": {
+        "name": "Gauge Height Trend",
+        "state": {
+          "rising": "Rising",
+          "falling": "Falling",
+          "steady": "Steady"
+        }
+      },
+      "discharge_trend": {
+        "name": "Discharge Trend",
+        "state": {
+          "rising": "Rising",
+          "falling": "Falling",
+          "steady": "Steady"
+        }
+      },
+      "gw_depth_trend": {
+        "name": "Depth to Water Level Trend",
+        "state": {
+          "rising": "Rising",
+          "falling": "Falling",
+          "steady": "Steady"
+        }
+      },
+      "station_status": {
+        "name": "Station Status"
+      },
+      "discharge_condition": {
+        "name": "Discharge Condition",
+        "state": {
+          "much_below_normal": "Much below normal",
+          "below_normal": "Below normal",
+          "normal": "Normal",
+          "above_normal": "Above normal",
+          "much_above_normal": "Much above normal"
+        }
+      },
+      "gauge_height_condition": {
+        "name": "Gauge Height Condition",
+        "state": {
+          "much_below_normal": "Much below normal",
+          "below_normal": "Below normal",
+          "normal": "Normal",
+          "above_normal": "Above normal",
+          "much_above_normal": "Much above normal"
+        }
+      },
+      "gw_depth_condition": {
+        "name": "Depth to Water Level Condition",
+        "state": {
+          "much_below_normal": "Much below normal",
+          "below_normal": "Below normal",
+          "normal": "Normal",
+          "above_normal": "Above normal",
+          "much_above_normal": "Much above normal"
+        }
+      },
+      "discharge_percentile": {
+        "name": "Discharge Percentile"
+      },
+      "gauge_height_percentile": {
+        "name": "Gauge Height Percentile"
+      },
+      "gw_depth_percentile": {
+        "name": "Depth to Water Level Percentile"
+      },
+      "discharge_pct_of_normal": {
+        "name": "Discharge % of Normal"
+      },
+      "gw_depth_pct_of_normal": {
+        "name": "Depth to Water Level % of Normal"
+      }
+    }
+  },
+  "exceptions": {
+    "http_status": {
+      "message": "The USGS API returned HTTP {status} for site {site_id}."
+    },
+    "response_format": {
+      "message": "The USGS API returned an unexpected response: {error}."
+    },
+    "communication": {
+      "message": "Error communicating with the USGS API: {error}."
+    },
+    "invalid_auth": {
+      "message": "The USGS API rejected the api.data.gov key. Update the key to reconnect."
     }
   }
 }

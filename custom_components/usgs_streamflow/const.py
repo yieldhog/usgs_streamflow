@@ -20,6 +20,11 @@ CONF_API_KEY = "api_key"
 # (subject to a strict rate limit).  The legacy backend never uses this.
 DEMO_KEY = "DEMO_KEY"
 
+# Where users obtain a personal api.data.gov key.  Shared by the config flow and
+# the repair issue that nudges DEMO_KEY users to get their own.  Passed as a
+# translation placeholder (hassfest forbids literal URLs in translation strings).
+API_SIGNUP_URL = "https://api.data.gov/signup/"
+
 # Which API backend a config entry polls.  Advanced per-entry option; defaults
 # to legacy so existing entries are unaffected until explicitly switched.
 CONF_BACKEND = "backend"

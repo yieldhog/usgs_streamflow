@@ -46,6 +46,15 @@ STORAGE_VERSION = 1
 _REFRESH_CHECK_INTERVAL = timedelta(hours=12)
 
 
+def stats_store(hass: HomeAssistant, site_id: str) -> Store:
+    """The persisted percent-of-normal cache Store for one gauge.
+
+    Single source of truth for the store key so the coordinator and entry-removal
+    cleanup (``async_remove_entry``) always target the same file.
+    """
+    return Store(hass, STORAGE_VERSION, f"{DOMAIN}_stats_{site_id}")
+
+
 def _is_stale(envelope: stats.Envelope, now) -> bool:
     """True when an envelope is missing its build time or older than the refresh window."""
     if not envelope.built:
@@ -79,9 +88,7 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         self.site_id = source.site_id
         # param_cd -> StatsParamConfig, limited to what this station serves.
         self.params = params
-        self._store: Store = Store(
-            hass, STORAGE_VERSION, f"{DOMAIN}_stats_{source.site_id}"
-        )
+        self._store: Store = stats_store(hass, source.site_id)
         self.envelopes: dict[str, stats.Envelope] = {}
         self._cache_loaded = False
 
@@ -186,7 +193,13 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
 
     # -- persistence ------------------------------------------------------- #
     async def _load_cache(self) -> None:
-        data = await self._store.async_load()
+        try:
+            data = await self._store.async_load()
+        except Exception as err:  # noqa: BLE001 - cache is best-effort; rebuild on any read error
+            _LOGGER.debug(
+                "Could not load stats cache for %s: %s", self._source.site_id, err
+            )
+            return
         if not data:
             return
         for param, raw in (data.get("envelopes") or {}).items():
@@ -199,6 +212,14 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
                 _LOGGER.debug("Discarding unreadable stats cache for %s", param)
 
     async def _save_cache(self) -> None:
-        await self._store.async_save(
-            {"envelopes": {p: e.to_dict() for p, e in self.envelopes.items()}}
-        )
+        try:
+            await self._store.async_save(
+                {"envelopes": {p: e.to_dict() for p, e in self.envelopes.items()}}
+            )
+        except Exception as err:  # noqa: BLE001 - a failed write must not disrupt stats
+            # The envelope is already held in memory; a persistence failure just
+            # means it will be rebuilt next time rather than loaded from disk.
+            _LOGGER.warning(
+                "Could not persist stats cache for %s: %s",
+                self._source.site_id, err,
+            )
