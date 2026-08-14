@@ -180,6 +180,55 @@ class TestEnsureAndCompute(unittest.TestCase):
         run(coord._ensure_envelopes())  # must not raise
         self.assertEqual(coord._compute(), {})
 
+    def test_persistent_failure_warns_once(self):
+        from custom_components.usgs_streamflow.client import UsgsCommunicationError
+
+        class Boom:
+            def __init__(self):
+                self.calls = 0
+            async def get_daily_means(self, *a):
+                self.calls += 1
+                raise UsgsCommunicationError("down")
+
+        source = fake_source({"00060": 1600.0}, {"00060": st_dt("2026-06-11")})
+        coord = self._coord(Boom(), source, {"00060": StatsParamConfig(invert=False)})
+        logger = "custom_components.usgs_streamflow.stats_coordinator"
+        with self.assertLogs(logger, level="WARNING") as first:
+            run(coord._rebuild("00060"))
+        self.assertEqual(len(first.records), 1)
+        self.assertIn("00060", coord._warned)
+        # A second failing rebuild does not re-warn (assertLogs would fail if no
+        # record is emitted, so assert on the guard + a fresh logger capture).
+        import logging
+        with self.assertLogs(logger, level="DEBUG") as second:
+            logging.getLogger(logger).debug("probe")  # keep the context non-empty
+            run(coord._rebuild("00060"))
+        self.assertEqual(
+            [r for r in second.records if r.levelno >= logging.WARNING], []
+        )
+
+    def test_success_after_failure_rewarns(self):
+        from custom_components.usgs_streamflow.client import UsgsCommunicationError
+
+        class Flaky:
+            def __init__(self, records):
+                self._records = records
+                self.fail = True
+            async def get_daily_means(self, *a):
+                if self.fail:
+                    raise UsgsCommunicationError("down")
+                return list(self._records)
+
+        client = Flaky(thirty_years())
+        source = fake_source({"00060": 1600.0}, {"00060": st_dt("2026-06-11")})
+        coord = self._coord(client, source, {"00060": StatsParamConfig(invert=False)})
+        run(coord._rebuild("00060"))              # fails -> warned
+        self.assertIn("00060", coord._warned)
+        client.fail = False
+        run(coord._rebuild("00060"))              # succeeds -> guard cleared
+        self.assertNotIn("00060", coord._warned)
+        self.assertIn("00060", coord.envelopes)
+
 
 def st_dt(d):
     """A tz-aware datetime at midnight for an ISO date (for reading_times)."""
