@@ -84,6 +84,11 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         )
         self.envelopes: dict[str, stats.Envelope] = {}
         self._cache_loaded = False
+        # Params whose most recent rebuild failed and has already been logged.
+        # Keeps the rebuild warning to log-once-until-recovery instead of
+        # repeating every refresh check; an entry is cleared on the next
+        # successful rebuild so a later failure logs afresh.
+        self._warned: set[str] = set()
 
     # -- coordinator update ------------------------------------------------ #
     async def _async_update_data(self) -> dict[str, stats.StatsResult]:
@@ -123,10 +128,12 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
                 start.isoformat(), end.isoformat(),
             )
         except UsgsClientError as err:
-            _LOGGER.warning(
-                "Could not fetch daily history for %s param %s: %s",
-                self._source.site_id, param, err,
-            )
+            if param not in self._warned:
+                _LOGGER.warning(
+                    "Could not fetch daily history for %s param %s: %s",
+                    self._source.site_id, param, err,
+                )
+                self._warned.add(param)
             return False
 
         envelope = stats.build_envelope(
@@ -138,13 +145,17 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
             built=dt_util.utcnow(),
         )
         if envelope is None or not envelope.days:
-            _LOGGER.warning(
-                "No usable daily history to build a stats envelope for %s param %s",
-                self._source.site_id, param,
-            )
+            if param not in self._warned:
+                _LOGGER.warning(
+                    "No usable daily history to build a stats envelope for %s param %s",
+                    self._source.site_id, param,
+                )
+                self._warned.add(param)
             return False
 
         self.envelopes[param] = envelope
+        # Rebuild succeeded — allow a future failure to warn again.
+        self._warned.discard(param)
         _LOGGER.debug(
             "Built stats envelope for %s param %s: %d days, %d years (%s..%s)",
             self._source.site_id, param, len(envelope.days), envelope.years,
