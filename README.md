@@ -108,7 +108,8 @@ those who want to opt in early — see [Data sources](#data-sources).
   daily-mean envelope swings a lot on tidally-influenced sites (faithful to
   WaterWatch, just jumpy).
 - **Provisional data.** Recent USGS values are provisional (not quality-assured)
-  and may be revised; the Modern backend exposes an `approval_status` attribute.
+  and may be revised; the Modern backend exposes an `approval_status` attribute
+  and a standardized `provisional` boolean for automations.
 - **Transmission cadence.** USGS often *transmits* about hourly even though it
   records every ~15 minutes, so the "latest" value can repeat across polls
   (`last_reading_time` shows the true observation time).
@@ -293,7 +294,7 @@ daily-mean values and places the live reading against it — the same view as
 |--------|------|-------|
 | *…* Condition | enum | `Much below normal` / `Below normal` / `Normal` / `Above normal` / `Much above normal` (percentile bands <10 / 10–25 / 25–75 / 75–90 / >90) |
 | *…* Percentile | % | Where today's reading falls in its calendar day's historical range |
-| *…* % of Normal | % | Reading as a percentage of the day's historical median |
+| *…* % of Normal | % | Reading as a percentage of the day's historical median (`unavailable` on days whose historical median is zero, where the ratio is undefined) |
 
 Depth-to-water is **inverted** throughout: a *deeper* reading means *less*
 groundwater, so a deep level reads as **below normal** (Condition), a **low
@@ -331,7 +332,7 @@ Always present. State is `Active` or `Offline`; when offline it carries an
 
 | Entity | Attributes |
 |--------|------------|
-| Measurement sensors | `usgs_site_id`, `last_reading_time` (when available). On the **Modern** backend also `approval_status` (`Approved`/`Provisional`), `qualifier`, `statistic_id`, `time_series_id`. |
+| Measurement sensors | `usgs_site_id`, `last_reading_time` (when available). On the **Modern** backend also `approval_status` (`Approved`/`Provisional`), a `provisional` boolean (`true` until USGS approves the value), `qualifier`, `statistic_id`, `time_series_id`. |
 | Rate / Trend sensors | `usgs_site_id`, `window_minutes`, `sample_count` (Trend also `rate_per_hour`). |
 | Condition / Percentile / % of Normal | `usgs_site_id`, `percentile`, `percent_of_normal`, `condition`, `median`, `sample_count`, `observation_date`, `inverted`, plus `record_years` / `record_start` / `record_end`. |
 | Station Status | `usgs_site_id`, `usgs_waterdata_url`, and `offline_reason` when offline. |
@@ -347,7 +348,7 @@ This integration supports both, selectable **per site**:
 | API | NWIS WaterServices (`waterservices.usgs.gov`) | Water Data OGC API (`api.waterdata.usgs.gov`) |
 | API key | **Not required** | **Required** (free; a built-in demo key works for light use) |
 | Status | Stable; slated for retirement ~Q1 2027 | New, still in **beta** here |
-| Extra data | — | Adds approval status, qualifier, and statistic/series-id attributes |
+| Extra data | — | Adds approval status (+ a `provisional` flag), qualifier, and statistic/series-id attributes |
 
 The **Legacy** backend is the default, so **installing or updating changes
 nothing** for existing sites until you explicitly switch one.
@@ -435,6 +436,11 @@ the gauge's datum.
   (more often during floods) even though it records every ~15 minutes, so the
   published "latest" value can be the same across several polls. The per-sensor
   `last_reading_time` attribute shows the true observation time.
+- **Filing an issue?** Open the integration's **⋮ → Download diagnostics** — the
+  redacted dump (the API key is never included) shows the backend in use, the
+  parameters the site reports, offline reason, and stats envelope metadata, which
+  makes "wrong status" / "no data" / "missing stats" reports much faster to
+  diagnose.
 
 ## How it works
 
@@ -447,9 +453,15 @@ the gauge's datum.
   gauge's day-of-year percentile envelope from ~30 years of daily-mean values,
   persists it to disk, and refreshes it only about monthly — so the live sensors
   just compare each reading to the cached envelope with no extra polling cost.
-- Parsing, offline detection, the rate/trend buffer, and the percent-of-normal
-  logic are covered by a dependency-free unit-test suite (`tests/`, run with
-  `python -m unittest discover -s tests -t .`) that also runs in CI.
+  That first envelope build is time-bounded, so a slow USGS response never stalls
+  setup; the measurement sensors load promptly and the envelope finishes in the
+  background.
+- Two test suites run in CI: a dependency-free unit suite (`tests/`, run with
+  `python -m unittest discover -s tests -t .`) covering parsing, offline
+  detection, the rate/trend buffer, and the percent-of-normal logic; and a
+  Home Assistant harness suite (`tests_ha/`, run with
+  `pip install -r requirements_test.txt && pytest`) covering the config/reauth/
+  options flows and the setup/unload lifecycle.
 
 ## Contributing
 
