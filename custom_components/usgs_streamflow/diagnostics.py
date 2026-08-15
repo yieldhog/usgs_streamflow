@@ -7,7 +7,12 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import UsgsConfigEntry
-from .const import CONF_API_KEY
+from .const import (
+    BACKEND_LEGACY,
+    CONF_API_KEY,
+    CONF_BACKEND,
+    CONF_ENABLED_PARAMETERS,
+)
 from .coordinator import CoordinatorData, USGSStreamflowCoordinator
 from .stats_coordinator import USGSStatsCoordinator
 
@@ -19,6 +24,7 @@ def _coordinator_diagnostics(coordinator: USGSStreamflowCoordinator) -> dict[str
     data: CoordinatorData | None = coordinator.data
     diag: dict[str, Any] = {
         "site_id": coordinator.site_id,
+        "site_name": coordinator.site_name,
         "known_params": sorted(coordinator.known_params),
         "last_update_success": coordinator.last_update_success,
     }
@@ -32,6 +38,10 @@ def _coordinator_diagnostics(coordinator: USGSStreamflowCoordinator) -> dict[str
             "station_offline": data.station_offline,
             "offline_reason": data.offline_reason,
             "reported_params": sorted(data.reported_params),
+            # Per-parameter metadata (approval status, qualifier, statistic /
+            # time-series id) — populated by the modern backend, all-None on
+            # legacy.  Useful for debugging provisional vs approved data.
+            "reading_attrs": data.reading_attrs,
         }
     return diag
 
@@ -77,6 +87,11 @@ async def async_get_config_entry_diagnostics(
             "data": async_redact_data(dict(entry.data), TO_REDACT),
             "options": async_redact_data(dict(entry.options), TO_REDACT),
         },
+        # Which backend answers and whether a real key is set — the first things
+        # to check for "wrong status" / "rate-limited" / "no data" reports.
+        "backend": entry.options.get(CONF_BACKEND, BACKEND_LEGACY),
+        "api_key_set": bool(entry.options.get(CONF_API_KEY)),
+        "enabled_params": entry.options.get(CONF_ENABLED_PARAMETERS),
         "coordinator": _coordinator_diagnostics(runtime.coordinator),
         "stats": _stats_diagnostics(runtime.stats),
     }
