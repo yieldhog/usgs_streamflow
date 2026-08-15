@@ -23,7 +23,6 @@ from homeassistant.helpers.selector import (
 )
 
 from .client import (
-    LegacyClient,
     ModernClient,
     SiteHit,
     UsgsClientError,
@@ -110,7 +109,14 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["state_code"] = "state_required_for_name_search"
             else:
                 try:
-                    client = LegacyClient(self.hass)
+                    # Search runs on the modern OGC API (the legacy WaterServices
+                    # service is being retired). It's keyless-friendly: an
+                    # existing entry's key is reused if present, otherwise the
+                    # shared DEMO_KEY covers the single search request. The
+                    # personal key is collected when the site is added.
+                    client = ModernClient(
+                        self.hass, api_key=self._existing_api_key() or None
+                    )
                     sites = await client.search_sites(search_term, state=state_code)
                 except UsgsClientError as err:
                     # Only treat genuine USGS client/transport failures as
@@ -160,8 +166,14 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_SITE_ID: site_id,
                         CONF_SITE_NAME: site.site_name,
                     },
+                    # New installs default to the modern OGC backend (legacy is
+                    # being retired). Existing entries keep whatever they have —
+                    # the runtime default stays legacy — so nothing migrates yet.
                     # Key lives in options so the options flow can edit it later.
-                    options={CONF_API_KEY: api_key},
+                    options={
+                        CONF_API_KEY: api_key,
+                        CONF_BACKEND: BACKEND_MODERN,
+                    },
                 )
             errors["base"] = "unknown"
 
