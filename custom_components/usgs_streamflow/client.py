@@ -666,6 +666,15 @@ class ModernClient:
             pages += 1
             if not page:
                 break
+        # Stopping at the page cap while USGS still advertises a ``next`` link
+        # means the result is truncated — surface it rather than silently
+        # returning a partial set that would corrupt stats or drop readings.
+        if next_url and pages >= _MAX_PAGES:
+            _LOGGER.warning(
+                "USGS OGC result truncated at %d pages for %s; some readings or "
+                "history may be missing (a 'next' link was still present)",
+                _MAX_PAGES, url,
+            )
         return features
 
     # -- site search ------------------------------------------------------- #

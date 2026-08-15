@@ -98,12 +98,13 @@ class _SeedClient:
 
 
 class TestCoordinatorSeeding(unittest.TestCase):
-    def _coord(self, client, known):
+    def _coord(self, client, known, enabled=None):
         coord = USGSStreamflowCoordinator.__new__(USGSStreamflowCoordinator)
         coord._history = defaultdict(deque)
         coord.site_id = "X"
         coord.known_params = set(known)
         coord._client = client
+        coord._enabled_params = enabled
         return coord
 
     def test_seed_fills_buffer_so_rate_computes_immediately(self):
@@ -128,6 +129,14 @@ class TestCoordinatorSeeding(unittest.TestCase):
         coord = self._coord(client, {"00065"})
         run(coord._seed_history())  # must not raise
         self.assertEqual(coord.recent_points("00065", 60), [])
+
+    def test_seed_skips_disabled_params(self):
+        # Discharge is reported by the station but the user disabled it, so its
+        # derived sensors won't exist — the warm-start request is skipped.
+        client = _SeedClient({"00060": [(at(3, 0), 1.0), (at(3, 30), 2.0)]})
+        coord = self._coord(client, {"00060"}, enabled={"00065"})
+        run(coord._seed_history())
+        self.assertEqual(client.asked, [])
 
     def test_seed_is_non_fatal_on_unexpected_error(self):
         # A stray (non-UsgsClientError) failure must never break the poll: the

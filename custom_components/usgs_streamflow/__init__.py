@@ -87,12 +87,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool
     # rate-limited demo key (cleared when a real key is set or on Legacy).
     _update_demo_key_issue(hass, entry, backend, api_key)
 
+    # The user's enabled-parameter selection (all supported params by default).
+    # Shared by the coordinator (to skip warm-start seeding for disabled derived
+    # params) and the stats-params filter below.
+    enabled = set(
+        entry.options.get(CONF_ENABLED_PARAMETERS) or SUPPORTED_PARAMETERS
+    )
+
     coordinator = USGSStreamflowCoordinator(
         hass,
         site_id=entry.data[CONF_SITE_ID],
         site_name=entry.data[CONF_SITE_NAME],
         update_interval_minutes=interval,
         client=client,
+        enabled_params=enabled,
     )
 
     await coordinator.async_config_entry_first_refresh()
@@ -104,9 +112,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool
     # coordinator and never blocks the rest of setup.
     stats_coordinator: USGSStatsCoordinator | None = None
     if entry.options.get(CONF_ENABLE_STATS):
-        enabled = set(
-            entry.options.get(CONF_ENABLED_PARAMETERS) or SUPPORTED_PARAMETERS
-        )
         reported = coordinator.known_params
         stats_params = {
             param: cfg

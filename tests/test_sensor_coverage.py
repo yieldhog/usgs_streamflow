@@ -1,5 +1,6 @@
 """Sensor coverage: descriptions and supported parameters stay in sync."""
 import unittest
+from types import SimpleNamespace
 
 from custom_components.usgs_streamflow import sensor as sensor_mod
 from custom_components.usgs_streamflow.const import (
@@ -57,6 +58,42 @@ class TestSensorCoverage(unittest.TestCase):
                     d.native_unit_of_measurement is not None or d.device_class is not None,
                     "needs a unit or a device class",
                 )
+
+
+class TestParamsToCreate(unittest.TestCase):
+    """Which measurement sensors are registered given the first-refresh state."""
+
+    def _coord(self, known, station_offline=None):
+        # station_offline=None models "no first-refresh data at all".
+        data = (
+            None if station_offline is None
+            else SimpleNamespace(station_offline=station_offline)
+        )
+        return SimpleNamespace(known_params=set(known), data=data)
+
+    @property
+    def _all(self):
+        return {d.param_cd for d in sensor_mod.SENSOR_DESCRIPTIONS}
+
+    def test_known_params_create_exactly_those(self):
+        got = sensor_mod._params_to_create(
+            self._coord({"00060", "00065"}, station_offline=False)
+        )
+        self.assertEqual(got, {"00060", "00065"})
+
+    def test_reporting_but_unsupported_creates_nothing(self):
+        # Station responded (not offline) but reported no supported params —
+        # no phantom sensors.
+        got = sensor_mod._params_to_create(self._coord(set(), station_offline=False))
+        self.assertEqual(got, set())
+
+    def test_offline_at_startup_creates_full_set(self):
+        got = sensor_mod._params_to_create(self._coord(set(), station_offline=True))
+        self.assertEqual(got, self._all)
+
+    def test_no_first_refresh_data_creates_full_set(self):
+        got = sensor_mod._params_to_create(self._coord(set(), station_offline=None))
+        self.assertEqual(got, self._all)
 
 
 if __name__ == "__main__":

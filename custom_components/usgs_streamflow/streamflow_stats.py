@@ -125,7 +125,7 @@ def classify(percentile: float, invert: bool = False) -> tuple[str, float]:
 
 def _percent_of_normal(
     value: float, median: float | None, invert: bool = False
-) -> float:
+) -> float | None:
     """Reading as a percentage of its day's historical median.
 
     For a direct quantity (discharge) this is ``value / median``: 70% means
@@ -133,9 +133,16 @@ def _percent_of_normal(
     flipped to ``median / value`` so the number tracks *water*, not depth — a
     deeper-than-normal reading reads below 100%, staying consistent with the
     inverted condition/percentile rather than contradicting them.
+
+    Returns ``None`` when the ratio is undefined — no positive median to compare
+    against (missing or zero), or an inverted ratio with a zero reading. A
+    genuine zero reading against a positive median stays ``0%`` (correctly "0%
+    of normal"), not ``None``.
     """
-    if not median or not value:
-        return 0.0
+    if not median:
+        return None
+    if invert and not value:
+        return None
     ratio = (median / value) if invert else (value / median)
     return round(ratio * 100, 1)
 
@@ -146,7 +153,7 @@ class StatsResult:
 
     condition: str
     percentile: float          # reported percentile (already inverted if needed)
-    percent_of_normal: float   # value / day-median * 100
+    percent_of_normal: float | None   # value / day-median * 100; None if undefined
     median: float              # day's historical median (P50)
     sample_count: int          # distinct daily values behind the day's anchors
     value: float               # the live reading evaluated
