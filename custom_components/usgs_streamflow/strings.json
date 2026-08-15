@@ -74,6 +74,10 @@
     "demo_key": {
       "title": "USGS Streamflow is using the shared demo API key",
       "description": "This gauge polls the Modern (Water Data OGC API) backend with the shared, rate-limited api.data.gov demo key, so updates may be throttled. Get a free personal key at {signup_url} and set it in the integration's options to remove the limit."
+    },
+    "legacy_backend": {
+      "title": "USGS legacy API is being retired",
+      "description": "This gauge still polls the legacy USGS WaterServices API, which USGS is decommissioning (planned for early 2027) — and a future update will remove it entirely. To keep this gauge working, switch it to the Modern backend now: enable **Advanced Mode** in your Home Assistant profile, open the integration's **Configure** dialog, set **Data source** to **Modern**, and add a free api.data.gov key ({signup_url})."
     }
   },
   "entity": {
