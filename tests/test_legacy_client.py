@@ -1,10 +1,37 @@
 """LegacyClient: WaterServices IV parsing and RDB site parsing."""
+import asyncio
 import unittest
 
+from tests import _ha
 from custom_components.usgs_streamflow.client import (
     LegacyClient,
+    UsgsCommunicationError,
     UsgsResponseFormatError,
 )
+
+
+class TestSearchTransportErrors(unittest.TestCase):
+    """Site-search transport failures are normalized to a UsgsClientError."""
+
+    def test_transport_error_is_wrapped(self):
+        class _BoomCM:
+            async def __aenter__(self):
+                raise RuntimeError("boom")
+
+            async def __aexit__(self, *exc):
+                return False
+
+        class _BoomSession:
+            def get(self, *args, **kwargs):
+                return _BoomCM()
+
+        _ha.set_session(_BoomSession())
+        client = LegacyClient(object())
+        # A raw aiohttp/transport error must surface as UsgsCommunicationError
+        # (a UsgsClientError), so the config flow can show "cannot_connect"
+        # instead of letting a bare exception escape.
+        with self.assertRaises(UsgsCommunicationError):
+            asyncio.run(client.search_sites("Potomac River", state="MD"))
 
 SAMPLE_IV = {
     "value": {

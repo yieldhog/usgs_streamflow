@@ -299,16 +299,26 @@ class LegacyClient:
             params["stateCd"] = state.strip().upper()
 
         timeout = aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT)
-        async with session.get(USGS_SITE_URL, params=params, timeout=timeout) as resp:
-            # The NWIS site service returns 404 when *no sites match* the query —
-            # documented behavior, not a transport error.  Treat it as an empty
-            # result set so the flow shows "no sites found" rather than a
-            # spurious connection error.
-            if resp.status == 404:
-                return []
-            if resp.status != 200:
-                raise UsgsHttpStatusError(resp.status)
-            text = await resp.text()
+        try:
+            async with session.get(
+                USGS_SITE_URL, params=params, timeout=timeout
+            ) as resp:
+                # The NWIS site service returns 404 when *no sites match* the
+                # query — documented behavior, not a transport error.  Treat it
+                # as an empty result set so the flow shows "no sites found"
+                # rather than a spurious connection error.
+                if resp.status == 404:
+                    return []
+                if resp.status != 200:
+                    raise UsgsHttpStatusError(resp.status)
+                text = await resp.text()
+        except UsgsClientError:
+            raise
+        except Exception as err:  # noqa: BLE001 - normalize transport errors
+            # aiohttp/timeout failures become a UsgsClientError so callers (the
+            # config flow, the coordinator) can handle them by type instead of
+            # catching bare Exception.
+            raise UsgsCommunicationError(str(err)) from err
 
         return self._parse_rdb_sites(text)
 
