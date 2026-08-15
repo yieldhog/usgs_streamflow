@@ -41,14 +41,14 @@ badge and the code land in the same PR.
       are versioned by HA itself).
 - [ ] ❌ Add `"quality_scale": "bronze"` (or higher) to `manifest.json` once the
       tier is met.
-- [ ] ⚠️ Port the test suite to `pytest-homeassistant-custom-component` (the core
-      test framework). **In progress:** an HA-harness suite now lives in
-      `tests_ha/` (config-flow, reauth, setup/unload/reauth lifecycle) alongside
-      the dependency-free `tests/` logic suite, and a **CI job** (`harness` in
-      `.github/workflows/tests.yml`) runs it with coverage. Run locally with
-      `pip install -r requirements_test.txt && pytest`. These harness tests were
-      authored without a local HA install, so the first CI run may need minor
-      fixture tweaks; measure coverage there and close the gap to ≥95%.
+- [x] ✅ Port the test suite to `pytest-homeassistant-custom-component` (the core
+      test framework). An HA-harness suite lives in `tests_ha/` (config-flow,
+      reauth, options, setup/unload/reauth lifecycle, diagnostics) alongside the
+      dependency-free `tests/` logic suite, and a **CI job** (`HA harness tests`
+      in `.github/workflows/tests.yml`) runs it with coverage — **green across
+      Python 3.11–3.13**. Run locally with
+      `pip install -r requirements_test.txt && pytest`. (Combined coverage is
+      enforced at ≥95% in CI.)
 - [ ] ✅ No third-party runtime requirements (`requirements: []`) — nothing to
       vendor or vet.
 
@@ -106,9 +106,12 @@ badge and the code land in the same PR.
 - [x] ✅ **entity-unavailable** — sensors implement `available`; offline/seasonal
       detection and "no envelope / no reading yet" all resolve to unavailable.
 - [x] ✅ **integration-owner** — `codeowners: ["@yieldhog"]`.
-- [x] ⚠️ **log-when-unavailable** — provided by `DataUpdateCoordinator` (logs the
-      first failure, suppresses repeats, logs recovery). Confirm this is
-      sufficient for the stats coordinator too.
+- [x] ✅ **log-when-unavailable** — the main coordinator raises `UpdateFailed`, so
+      `DataUpdateCoordinator` logs the first failure, suppresses repeats, and logs
+      recovery. The stats coordinator never enters an unavailable state by design
+      (best-effort over a persisted cache); its one manual warning path (a failing
+      envelope rebuild) is guarded to log once until a rebuild succeeds, matching
+      log-once-until-recovery.
 - [x] ✅ **parallel-updates** — `PARALLEL_UPDATES = 0` declared in `sensor.py`.
 - [x] ✅ **reauthentication-flow** — clients declare `uses_auth`; the coordinator
       maps HTTP 401/403 on the authenticated (Modern) backend to
@@ -125,7 +128,10 @@ badge and the code land in the same PR.
 
 - [x] ✅ **devices** — each gauge is a device via `DeviceInfo`.
 - [x] ✅ **diagnostics** — `diagnostics.py` dumps entry data/options (API key
-      redacted), coordinator state, and stats envelope metadata + results.
+      redacted), the backend in use + whether a key is set + enabled parameters,
+      coordinator state (site name, known params, latest values/times/offline
+      reason, per-reading approval metadata), and stats envelope metadata +
+      results.
 - [x] ➖ **discovery** — USGS gauges aren't network-discoverable; the user
       searches and selects a site (exempt).
 - [x] ➖ **discovery-update-info** — no discovery (exempt).
