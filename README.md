@@ -189,6 +189,12 @@ This integration follows standard Home Assistant removal — no extra cleanup.
    [Data sources](#data-sources). You can also add it later in Options.)*
 5. Repeat to add more sites.
 
+> **Note:** Site search always uses the USGS **WaterServices Site Service** (the
+> legacy backend), so no API key is needed to find and add a gauge — that's why
+> a two-letter state code is required for name searches. The **Data source**
+> option only affects how the gauge *polls* afterwards (Legacy WaterServices or
+> the Modern OGC API).
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/yieldhog/usgs_streamflow/main/images/01-search-by-name.png" alt="Search step: stream name plus state code" width="300">
   <img src="https://raw.githubusercontent.com/yieldhog/usgs_streamflow/main/images/03-select-station.png" alt="Select the matching station and optionally add an API key" width="300">
