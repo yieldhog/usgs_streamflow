@@ -1,6 +1,7 @@
 """Sensor platform for USGS Streamflow."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -61,6 +62,8 @@ from .streamflow_stats import CONDITION_ORDER, StatsResult
 
 if TYPE_CHECKING:
     from . import UsgsConfigEntry
+
+_LOGGER = logging.getLogger(__name__)
 
 # All sensors are read-only and driven by the DataUpdateCoordinator (no per-entity
 # polling or device writes), so no update serialization is needed.
@@ -380,6 +383,29 @@ def _make_device_info(site_id: str, site_name: str) -> DeviceInfo:
     )
 
 
+def _params_to_create(coordinator: USGSStreamflowCoordinator) -> set[str]:
+    """Decide which measurement parameters to register at setup.
+
+    After the first refresh, ``known_params`` holds the supported parameters the
+    station reported.  When it's empty we split two very different cases using
+    the first refresh's station state:
+
+    * ``known_params`` is non-empty → create exactly those.
+    * The station responded but reported nothing supported → create **nothing**,
+      so an unsupported-only site doesn't spawn a full set of permanently
+      Unavailable phantom sensors.
+    * The station was unreachable / not reporting at startup (offline, e.g. a
+      seasonal shutdown) → create the full supported set so sensors appear when
+      the station recovers.
+    """
+    if coordinator.known_params:
+        return set(coordinator.known_params)
+    first = coordinator.data
+    if first is not None and not first.station_offline:
+        return set()
+    return {desc.param_cd for desc in SENSOR_DESCRIPTIONS}
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: UsgsConfigEntry,
@@ -396,21 +422,16 @@ async def async_setup_entry(
         USGSStationStatusSensor(coordinator, entry),
     ]
 
-    # Determine which measurement sensors to register.
-    #
-    # After async_config_entry_first_refresh() (called in __init__.py before
-    # we arrive here), coordinator.known_params is populated if the station was
-    # online during that first fetch.  We use it to create only the sensors the
-    # station actually has.
-    #
-    # If known_params is still empty the station was offline at startup (e.g.,
-    # seasonal shutdown).  In that case we register all three sensors as a
-    # fallback so they appear when the station comes back online; the
-    # `available` property will correctly mark any unsupported params as
-    # Unavailable once the station is reachable and known_params is populated.
-    params_to_create = coordinator.known_params or {
-        desc.param_cd for desc in SENSOR_DESCRIPTIONS
-    }
+    # Which measurement sensors to register (see _params_to_create).  An empty
+    # result specifically means the station responded but has no supported
+    # parameters — note it so an "Active but no sensors" site is explainable.
+    params_to_create = _params_to_create(coordinator)
+    if not params_to_create:
+        _LOGGER.info(
+            "USGS site %s is reporting, but none of its parameters are "
+            "supported by this integration — no measurement sensors created",
+            coordinator.site_id,
+        )
 
     # Honor the user's parameter selection from the options flow.  When unset
     # (the default), every supported parameter is eligible; the
@@ -538,8 +559,8 @@ class USGSStreamSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntit
         3. known_params is populated and this param_cd is NOT in it — station
            came back online and confirmed it doesn't have this sensor (only
            possible if we fell through the offline-at-startup fallback path and
-           created all three sensors).  Mark permanently unavailable so the user
-           can see it and disable/remove it from the entity registry.
+           created the full supported set).  Mark permanently unavailable so the
+           user can see it and disable/remove it from the entity registry.
         """
         if not super().available:
             return False

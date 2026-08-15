@@ -79,6 +79,7 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         update_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
         client: UsgsClient | None = None,
         api_key: str | None = None,
+        enabled_params: set[str] | None = None,
     ) -> None:
         super().__init__(
             hass,
@@ -88,6 +89,10 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
         self.site_id = site_id
         self.site_name = site_name
+        # The user's enabled-parameter selection, if any (None = all supported).
+        # Only used to skip warm-start history seeding for derived parameters
+        # whose sensors won't be created, saving needless startup requests.
+        self._enabled_params = enabled_params
         # All USGS network access goes through this client.  Defaults to the
         # legacy WaterServices backend; a later phase injects the modern one.
         # The API key is passed to the default client but ignored by the legacy
@@ -155,8 +160,8 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # still tells us exactly which parameters it has — a seasonal gauge
         # with -999999 readings still has value_lists for its real sensors.
         # Gating this on "not offline" caused the fallback in sensor.py to
-        # create all three sensors (including phantom temp) for every station
-        # that was offline at startup, even those that never had a temp sensor.
+        # create the full supported set for every station that was offline at
+        # startup, even those that never had those sensors.
         if result.reported_params:
             self.known_params.update(result.reported_params)
 
@@ -204,6 +209,10 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         for param_cd in DERIVED_PARAM_CODES:
             if self.known_params and param_cd not in self.known_params:
+                continue
+            # Skip seeding a derived parameter the user disabled — its rate/trend
+            # sensors won't be created, so the warm-start request is wasted.
+            if self._enabled_params is not None and param_cd not in self._enabled_params:
                 continue
             try:
                 points = await self._client.get_recent_values(

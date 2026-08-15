@@ -196,9 +196,22 @@ class TestEvaluate(unittest.TestCase):
         self.assertAlmostEqual(res.percent_of_normal, 1600.0 / 800.0 * 100, places=1)
 
     def test_percent_of_normal_zero_value_is_safe(self):
-        # Depth of 0 (water at surface) must not divide-by-zero when inverted.
+        # Depth of 0 (water at surface) is an undefined ratio when inverted: it
+        # must not divide-by-zero, and reports as unavailable (None) rather than
+        # a misleading 0% of normal.
         res = self.env.evaluate(date(2026, 6, 19), 0.0, invert=True)
-        self.assertEqual(res.percent_of_normal, 0.0)
+        self.assertIsNone(res.percent_of_normal)
+
+    def test_percent_of_normal_zero_median_is_undefined(self):
+        # A day whose historical median is 0 (ephemeral/dry) has an undefined
+        # ratio — report None, not a misleading 0%.
+        from custom_components.usgs_streamflow.streamflow_stats import (
+            _percent_of_normal,
+        )
+        self.assertIsNone(_percent_of_normal(5.0, 0.0))
+        self.assertIsNone(_percent_of_normal(5.0, None))
+        # A genuine zero reading against a positive median is still 0%.
+        self.assertEqual(_percent_of_normal(0.0, 100.0), 0.0)
 
 
 class TestSerialization(unittest.TestCase):

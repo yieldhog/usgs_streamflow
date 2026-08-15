@@ -101,6 +101,25 @@ class TestGetLatestValues(unittest.TestCase):
         self.assertEqual(set(res.readings), {"00065", "00060"})
         self.assertEqual(session.calls[1]["url"], "https://api.x/next-page")
 
+    def test_page_cap_with_next_link_warns_truncation(self):
+        # Every page advertises a next link, so the cap is reached while USGS
+        # still says there is more — the client must warn about truncation.
+        pages = [
+            _ha.FakeResp(json_data=fc(
+                [feat({"parameter_code": "00065", "value": str(i),
+                       "time": "2026-06-11T01:00:00Z"})],
+                links=[{"rel": "next", "href": f"https://api.x/p{i}"}],
+            ))
+            for i in range(client_mod._MAX_PAGES + 2)
+        ]
+        _ha.set_session(_ha.FakeSession(pages))
+        logger = "custom_components.usgs_streamflow.client"
+        with self.assertLogs(logger, level="WARNING") as cm:
+            res = run(self.client.get_latest_values("X", ["00065"]))
+        self.assertTrue(any("truncated" in r.getMessage() for r in cm.records))
+        # It still returns what it managed to collect (up to the cap).
+        self.assertTrue(res.station_reporting)
+
 
 class TestGetSiteParameters(unittest.TestCase):
     def test_points_only_intersect_supported(self):

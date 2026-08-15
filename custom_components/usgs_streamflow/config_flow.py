@@ -112,7 +112,10 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 try:
                     client = LegacyClient(self.hass)
                     sites = await client.search_sites(search_term, state=state_code)
-                except Exception as err:
+                except UsgsClientError as err:
+                    # Only treat genuine USGS client/transport failures as
+                    # "cannot connect"; let unexpected errors surface as bugs
+                    # instead of masking them behind a connection message.
                     _LOGGER.exception("Error contacting USGS site search API: %s", err)
                     errors["base"] = "cannot_connect"
                 else:
