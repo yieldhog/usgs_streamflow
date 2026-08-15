@@ -96,5 +96,41 @@ class TestParamsToCreate(unittest.TestCase):
         self.assertEqual(got, self._all)
 
 
+class TestStreamSensorAttributes(unittest.TestCase):
+    """Standardized `provisional` bool derived from modern approval status."""
+
+    def _sensor(self, param_cd, reading_attrs, reading_times=None):
+        s = sensor_mod.USGSStreamSensor.__new__(sensor_mod.USGSStreamSensor)
+        s.coordinator = SimpleNamespace(
+            site_id="X",
+            data=SimpleNamespace(
+                reading_times=reading_times or {},
+                reading_attrs=reading_attrs,
+            ),
+        )
+        s.entity_description = SimpleNamespace(param_cd=param_cd)
+        return s
+
+    def test_provisional_true_when_not_approved(self):
+        attrs = self._sensor(
+            "00060", {"00060": {"approval_status": "Provisional"}}
+        ).extra_state_attributes
+        self.assertIs(attrs["provisional"], True)
+        self.assertEqual(attrs["approval_status"], "Provisional")
+
+    def test_provisional_false_when_approved(self):
+        attrs = self._sensor(
+            "00060", {"00060": {"approval_status": "Approved"}}
+        ).extra_state_attributes
+        self.assertIs(attrs["provisional"], False)
+
+    def test_no_provisional_on_legacy(self):
+        # Legacy leaves approval_status None -> no provisional attribute at all.
+        attrs = self._sensor(
+            "00060", {"00060": {"approval_status": None}}
+        ).extra_state_attributes
+        self.assertNotIn("provisional", attrs)
+
+
 if __name__ == "__main__":
     unittest.main()

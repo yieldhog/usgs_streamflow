@@ -595,9 +595,16 @@ class USGSStreamSensor(CoordinatorEntity[USGSStreamflowCoordinator], SensorEntit
             # Per-reading metadata from the modern backend (approval status,
             # qualifier, statistic / time-series id).  Absent on legacy, where
             # these are None, so nothing extra appears there.
-            for key, val in data.reading_attrs.get(param_cd, {}).items():
+            param_attrs = data.reading_attrs.get(param_cd, {})
+            for key, val in param_attrs.items():
                 if val is not None:
                     attrs[key] = val
+            # A standardized bool for automations: USGS marks recent values
+            # "Provisional" until reviewed and "Approved" afterwards.  Only set
+            # when the backend reports an approval status (modern only).
+            approval = param_attrs.get("approval_status")
+            if approval is not None:
+                attrs["provisional"] = approval.strip().lower() != "approved"
         return attrs
 
 

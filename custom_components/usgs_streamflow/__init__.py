@@ -1,6 +1,8 @@
 """USGS Streamflow integration."""
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
@@ -23,10 +25,13 @@ from .const import (
     DEMO_KEY,
     DOMAIN,
     STATS_PARAMS,
+    STATS_SETUP_TIMEOUT_SECONDS,
     SUPPORTED_PARAMETERS,
 )
 from .coordinator import USGSStreamflowCoordinator
 from .stats_coordinator import USGSStatsCoordinator, stats_store
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
 
@@ -122,7 +127,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool
             stats_coordinator = USGSStatsCoordinator(
                 hass, coordinator, client, stats_params
             )
-            await stats_coordinator.async_refresh()
+            # Envelope building can pull ~30 years of daily values per parameter,
+            # which is occasionally slow or rate-limited.  Bound the initial
+            # build so a slow USGS response can't stall — or, past HA's own setup
+            # timeout, fail — the whole entry: the measurement sensors still load
+            # promptly.  On timeout the stats coordinator keeps building on its
+            # normal 12-hour cycle; envelopes not ready yet simply yield their
+            # sensors on a later reload.
+            try:
+                async with asyncio.timeout(STATS_SETUP_TIMEOUT_SECONDS):
+                    await stats_coordinator.async_refresh()
+            except TimeoutError:
+                _LOGGER.warning(
+                    "USGS stats envelope build for %s exceeded %ds; continuing "
+                    "setup without it (stats will populate on a later refresh)",
+                    coordinator.site_id, STATS_SETUP_TIMEOUT_SECONDS,
+                )
             entry.async_on_unload(stats_coordinator.attach_source())
 
     entry.runtime_data = UsgsRuntimeData(

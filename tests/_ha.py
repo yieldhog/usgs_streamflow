@@ -322,6 +322,16 @@ def install_stubs() -> None:
         SensorStateClass=_Attr,
     )
 
+    # homeassistant.components.diagnostics.async_redact_data — minimal flat
+    # redactor (the real one recurses; our TO_REDACT keys are all top-level).
+    def _async_redact_data(data, to_redact):
+        return {
+            key: ("**REDACTED**" if key in to_redact else value)
+            for key, value in dict(data).items()
+        }
+
+    mod("homeassistant.components.diagnostics", async_redact_data=_async_redact_data)
+
     # voluptuous
     mod("voluptuous", Schema=_VSchema, Optional=_VMarker,
         Required=lambda key, **kw: _VMarker(key, **kw))

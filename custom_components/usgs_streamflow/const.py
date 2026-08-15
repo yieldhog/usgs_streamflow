@@ -71,6 +71,12 @@ STATS_REFRESH_DAYS = 30
 # can't express a "normal" range.  Gauges with gappy years may drop a few days.
 STATS_MIN_SAMPLES = 5
 
+# Upper bound (seconds) on how long the initial stats-envelope build may block
+# entry setup.  Past this, setup continues without waiting and the stats
+# coordinator finishes building on its normal refresh cycle.  Chosen to comfortably
+# cover a normal multi-parameter build while staying well under HA's setup timeout.
+STATS_SETUP_TIMEOUT_SECONDS = 30
+
 # Polling cadence.  USGS instantaneous-values data typically refreshes about
 # every 15 minutes, so polling faster just adds load without yielding new data.
 DEFAULT_SCAN_INTERVAL_MINUTES = 15
