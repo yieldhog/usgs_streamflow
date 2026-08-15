@@ -257,6 +257,14 @@ _FIPS_TO_STATE: dict[str, str] = {
     "78": "VI",
 }
 
+# Inverse of the above: two-letter postal code -> numeric FIPS. The modern
+# monitoring-locations collection filters on numeric ``state_code`` (verified:
+# "24" -> Maryland), while the config flow collects a postal code — so name
+# searches convert one to the other before filtering.
+_STATE_TO_FIPS: dict[str, str] = {
+    abbr: fips for fips, abbr in _FIPS_TO_STATE.items()
+}
+
 
 class LegacyClient:
     """USGS client backed by the legacy WaterServices API.
@@ -694,9 +702,11 @@ class ModernClient:
         """Search monitoring locations by exact site number or name substring.
 
         Name search uses POST CQL2 ``like`` (uppercased — ``LIKE`` is
-        case-sensitive) scoped to ``agency_code = 'USGS'`` (MIGRATION.md §7.1).
-        The ``state`` argument is accepted but not applied server-side: the
-        ``state_code`` units are unconfirmed (§3.5), so we do not filter on it.
+        case-sensitive) scoped to ``agency_code = 'USGS'`` (MIGRATION.md §7.1),
+        and — when a two-letter ``state`` is given — a CQL2 ``= state_code``
+        arm (numeric FIPS, verified to constrain results). The config flow
+        requires a state for name searches, so this keeps them bounded to that
+        state instead of matching the name substring nationwide.
         """
         url = f"{MODERN_BASE_URL}/collections/monitoring-locations/items"
         candidate = normalize_site_number(term)
@@ -706,19 +716,25 @@ class ModernClient:
                 "args": [{"property": "monitoring_location_number"}, candidate],
             }
         else:
-            cql = {
-                "op": "and",
-                "args": [
-                    {
-                        "op": "like",
-                        "args": [
-                            {"property": "monitoring_location_name"},
-                            f"%{term.strip().upper()}%",
-                        ],
-                    },
-                    {"op": "=", "args": [{"property": "agency_code"}, "USGS"]},
-                ],
-            }
+            args: list[dict] = [
+                {
+                    "op": "like",
+                    "args": [
+                        {"property": "monitoring_location_name"},
+                        f"%{term.strip().upper()}%",
+                    ],
+                },
+                {"op": "=", "args": [{"property": "agency_code"}, "USGS"]},
+            ]
+            # Constrain to the requested state (postal -> numeric FIPS). An
+            # unknown/blank code is simply skipped rather than filtering to
+            # nothing.
+            fips = _STATE_TO_FIPS.get((state or "").strip().upper())
+            if fips:
+                args.append(
+                    {"op": "=", "args": [{"property": "state_code"}, fips]}
+                )
+            cql = {"op": "and", "args": args}
 
         envelope = await self._request_json(
             "POST",

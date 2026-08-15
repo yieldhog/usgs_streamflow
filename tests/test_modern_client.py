@@ -152,6 +152,31 @@ class TestSearchSites(unittest.TestCase):
         )
         self.assertEqual(hits[0].site_id, "01460595")
         self.assertEqual(hits[0].site_type, "ST")
+        # No state given -> no state_code arm (just name + agency).
+        props = [a["args"][0].get("property") for a in body["args"]]
+        self.assertNotIn("state_code", props)
+
+    def test_name_search_adds_state_code_as_fips(self):
+        session = _ha.FakeSession([_ha.FakeResp(json_data=fc([
+            feat({"monitoring_location_id": "USGS-01646500",
+                  "monitoring_location_name": "POTOMAC", "site_type": "ST"}),
+        ]))])
+        _ha.set_session(session)
+        run(ModernClient(object(), api_key="K").search_sites("potomac", state="md"))
+        body = json.loads(session.calls[-1]["data"])
+        arms = {a["args"][0]["property"]: a["args"][1] for a in body["args"]}
+        self.assertEqual(arms["monitoring_location_name"], "%POTOMAC%")
+        self.assertEqual(arms["agency_code"], "USGS")
+        # Postal "md" -> numeric FIPS "24" (verified to constrain results).
+        self.assertEqual(arms["state_code"], "24")
+
+    def test_name_search_unknown_state_skips_filter(self):
+        session = _ha.FakeSession([_ha.FakeResp(json_data=fc([]))])
+        _ha.set_session(session)
+        run(ModernClient(object(), api_key="K").search_sites("potomac", state="ZZ"))
+        body = json.loads(session.calls[-1]["data"])
+        props = [a["args"][0].get("property") for a in body["args"]]
+        self.assertNotIn("state_code", props)  # unknown code -> no state arm
 
     def test_site_number_uses_equality(self):
         session = _ha.FakeSession([_ha.FakeResp(json_data=fc([
