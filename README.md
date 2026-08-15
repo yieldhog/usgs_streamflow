@@ -14,9 +14,11 @@ water-quality sites — and exposes each reported measurement as a sensor, with
 automatic handling of seasonal shutdowns and built-in rate-of-change/trend
 sensors for level and flow.
 
-No account or API key is required for the default data source. An optional
-**Modern** backend (the new USGS Water Data OGC API) is available per site for
-those who want to opt in early — see [Data sources](#data-sources).
+New installs use the USGS **Water Data OGC API** (the modern replacement for the
+retiring WaterServices API). A free [api.data.gov](https://api.data.gov/signup/)
+key is recommended — a shared demo key covers light use. Existing sites on the
+legacy backend keep working but are deprecated — see
+[Data sources](#data-sources).
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/yieldhog/usgs_streamflow/main/images/05-device-sensors.png" alt="A USGS gauge as a Home Assistant device showing many sensors" width="900">
@@ -80,9 +82,9 @@ those who want to opt in early — see [Data sources](#data-sources).
   genuinely serves.
 - **Per-site configuration** — poll interval and which parameters become sensors.
 - **Multiple sites** — add as many as you like; each becomes its own device.
-- **Future-proofed for the USGS API migration** — an optional, opt-in **Modern**
-  backend targets the new USGS Water Data OGC API that will replace the legacy
-  service (see [Data sources](#data-sources)).
+- **Runs on the new USGS Water Data OGC API** by default — the modern replacement
+  for the retiring WaterServices API. Existing legacy sites keep working (now
+  deprecated); see [Data sources](#data-sources).
 
 ## Use cases
 
@@ -113,16 +115,19 @@ those who want to opt in early — see [Data sources](#data-sources).
 - **Transmission cadence.** USGS often *transmits* about hourly even though it
   records every ~15 minutes, so the "latest" value can repeat across polls
   (`last_reading_time` shows the true observation time).
-- **Modern backend is beta.** It targets USGS's still-evolving OGC API and needs
-  an api.data.gov key; the Legacy backend remains the stable default.
+- **Modern backend is the default and needs a key.** It targets USGS's Water
+  Data OGC API (which USGS still versions as `v0` and will move to a new URL at
+  `v1` — the integration isolates that so upgrades are seamless) and works best
+  with a free api.data.gov key. The Legacy backend is deprecated and slated for
+  removal.
 
 ## Requirements
 
 - Home Assistant **2026.3** or newer
 - [HACS](https://hacs.xyz/) (recommended) or manual installation
-- No account or API key for the default (legacy) data source. An optional, free
-  [api.data.gov](https://api.data.gov/signup/) key is only needed if you opt a
-  site into the **Modern** backend.
+- A free [api.data.gov](https://api.data.gov/signup/) key is recommended for the
+  default **Modern** backend (a shared demo key works for light use). No key is
+  needed to search for and add a gauge.
 
 ## Installation
 
@@ -215,7 +220,7 @@ After adding a site, click **Configure** on the entry to adjust:
 |--------|-------------|
 | **Update interval** | How often to poll USGS, in minutes (minimum **15**). USGS instantaneous data refreshes about every 15 minutes, so polling faster adds load without new data. |
 | **Parameters to show** | Uncheck measurements you don't want as sensors. Unchecked parameters won't create sensors even if the site reports them. |
-| **API key** *(optional)* | An [api.data.gov](https://api.data.gov/signup/) key for the **Modern** backend. Leave blank to fall back to a shared, rate-limited demo key. The default (legacy) backend ignores it. Pre-filled from another entry if you've already set one. |
+| **API key** *(recommended)* | An [api.data.gov](https://api.data.gov/signup/) key for the **Modern** backend (the default). Leave blank to fall back to a shared, rate-limited demo key. Ignored by legacy entries. Pre-filled from another entry if you've already set one. |
 | **Percent-of-normal sensors** *(opt-in)* | Adds **Condition**, **Percentile**, and **% of Normal** sensors for discharge, depth-to-water, and gauge height (gauge height: Condition + Percentile only) by comparing the live reading to ~30 years of daily history. Off by default — the first build downloads the long-term record per gauge, then caches it on disk. See [Condition & percent-of-normal sensors](#condition--percent-of-normal-sensors). |
 | **Data source** *(advanced)* | **Legacy** (WaterServices — stable default) or **Modern** (Water Data OGC API). Only shown when Home Assistant **Advanced Mode** is enabled in your user profile. |
 
@@ -343,15 +348,19 @@ USGS is retiring the legacy **WaterServices** API (decommission planned for
 **Q1 2027**) in favor of the modern **[Water Data OGC API](https://api.waterdata.usgs.gov/ogcapi/v0)**.
 This integration supports both, selectable **per site**:
 
-| | Legacy (default) | Modern (opt-in) |
+| | Modern (default) | Legacy (deprecated) |
 |---|---|---|
-| API | NWIS WaterServices (`waterservices.usgs.gov`) | Water Data OGC API (`api.waterdata.usgs.gov`) |
-| API key | **Not required** | **Required** (free; a built-in demo key works for light use) |
-| Status | Stable; slated for retirement ~Q1 2027 | New, still in **beta** here |
-| Extra data | — | Adds approval status (+ a `provisional` flag), qualifier, and statistic/series-id attributes |
+| API | Water Data OGC API (`api.waterdata.usgs.gov`) | NWIS WaterServices (`waterservices.usgs.gov`) |
+| API key | **Recommended** (free; a built-in demo key works for light use) | Not used |
+| Status | Default for new installs | Being retired by USGS (~Q1 2027); a future release removes it |
+| Extra data | Approval status (+ a `provisional` flag), qualifier, and statistic/series-id attributes | — |
 
-The **Legacy** backend is the default, so **installing or updating changes
-nothing** for existing sites until you explicitly switch one.
+**New installs use the Modern backend** and search for gauges through it — a free
+[api.data.gov](https://api.data.gov/signup/) key is recommended (the shared demo
+key covers light use). **Existing sites keep polling whatever they were set to**:
+legacy entries are untouched, but show a deprecation notice — switch them to
+Modern (**Advanced Mode → Configure → Data source**, and add a key) before USGS
+retires the legacy API.
 
 ### Getting an API key (modern backend)
 
@@ -371,18 +380,20 @@ per hour) — fine to try one site, but it will hit rate limits (HTTP 429) with
 several sites or frequent polling. A free personal key raises the limit
 substantially. The integration backs off automatically on 429 responses.
 
-### Trying the modern backend / comparing them
+### Switching an existing legacy site to Modern
+
+Existing legacy entries keep working but are deprecated. To move one:
 
 1. Enable **Advanced Mode** in your Home Assistant user profile (so the **Data
    source** option appears).
-2. Add a key (above), or rely on the demo key for a quick try.
-3. **Recommended A/B test:** add the **same gauge a second time** and set the new
-   entry's **Data source → Modern**, leaving your original on **Legacy**. Compare
-   the raw measurement sensors over a day or two.
+2. Get a free [api.data.gov](https://api.data.gov/signup/) key (or rely on the
+   demo key for light use).
+3. Open the site's **Configure** dialog, set **Data source → Modern**, and add
+   the key. The entry reloads on the new backend; the deprecation notice clears.
 
-The modern backend is still in beta — please
+Please
 [report](https://github.com/yieldhog/usgs_streamflow/issues) any value,
-parameter, or offline-detection mismatches versus the legacy entry. See
+parameter, or offline-detection mismatches you notice after switching. See
 [`MIGRATION.md`](MIGRATION.md) for the full migration plan and status.
 
 ## Seasonal & offline handling
