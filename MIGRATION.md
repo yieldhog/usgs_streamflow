@@ -1,8 +1,10 @@
 # USGS Streamflow — Legacy → Modernized API Migration
 
-**Status:** Phases A–D implemented and shipping in the migration beta. Default
-backend is still **legacy**, so existing entries are unaffected until opted in.
-Phase E (cutover) is future work.
+**Status:** Phases A–E in progress. As of **v1.4.0**, the **modern** backend is
+the **default for new installs**, site search runs on the modern OGC API, and
+existing legacy entries keep working but raise a deprecation Repair issue. Legacy
+is removed in a later **v2.0.0** (reauth-to-add-key migration). Gate 0 items are
+all re-verified live (see §11).
 **Last verified:** 2026-08-15 (Gate 0 items re-confirmed live; see §11)
 **Migration beta version:** `1.2.0b2` (branch `new-api-transition`, merged to `beta`)
 **Baseline before migration:** `1.1.0b2`
@@ -348,10 +350,15 @@ and [§9](#9-verification-log)):
 - **Acceptance:** values, detected parameters, and offline detection match
   legacy for both test sites across the window.
 
-### Phase E — Cutover & cleanup (later; not this beta)
-- Flip default to `modern` for new installs; migrate existing entries.
-- Keep `LegacyClient` as a runtime fallback through the overlap.
-- Remove legacy well before the **Q1 2027** decommission.
+### Phase E — Cutover & cleanup (in progress)
+- ✅ **v1.4.0:** default `modern` for new installs; site search on the modern
+  OGC API (keyless via DEMO_KEY, with the verified state-code filter); legacy
+  entries kept on legacy but raised a **deprecation Repair issue**; `LegacyClient`
+  retained as a runtime fallback; "beta" framing dropped.
+- 🔜 **v2.0.0:** `async_migrate_entry` flips remaining legacy entries to modern;
+  entries without a personal key get a **reauth prompt**; remove `LegacyClient`,
+  the backend selector, and legacy tests. Land well before the **Q1 2027**
+  decommission.
 
 ### Versioning
 - Branch `release/1.2.0` off the `1.1.0b2` tag; manifest `1.2.0b1`; GitHub

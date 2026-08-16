@@ -63,6 +63,36 @@ def _update_demo_key_issue(
         ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
+def _legacy_backend_issue_id(entry: ConfigEntry) -> str:
+    return f"legacy_backend_{entry.entry_id}"
+
+
+def _update_legacy_backend_issue(
+    hass: HomeAssistant, entry: ConfigEntry, backend: str
+) -> None:
+    """Raise (or clear) a deprecation repair issue for entries on legacy.
+
+    USGS is retiring the legacy WaterServices API (planned Q1 2027) and a future
+    release drops it entirely. Nudge existing legacy entries to switch to the
+    modern backend (and add a key) while both still work. Clears automatically
+    once the entry is switched to modern.
+    """
+    issue_id = _legacy_backend_issue_id(entry)
+    if backend == BACKEND_LEGACY:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="legacy_backend",
+            translation_placeholders={"signup_url": API_SIGNUP_URL},
+            learn_more_url="https://github.com/yieldhog/usgs_streamflow#data-sources",
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
 @dataclass
 class UsgsRuntimeData:
     """Runtime objects stored on the config entry (see ``runtime-data`` rule)."""
@@ -91,6 +121,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> bool
     # Surface a repair issue when polling the Modern backend on the shared,
     # rate-limited demo key (cleared when a real key is set or on Legacy).
     _update_demo_key_issue(hass, entry, backend, api_key)
+    # Deprecation nudge for entries still on the legacy backend (cleared once
+    # switched to modern).
+    _update_legacy_backend_issue(hass, entry, backend)
 
     # The user's enabled-parameter selection (all supported params by default).
     # Shared by the coordinator (to skip warm-start seeding for disabled derived
@@ -168,4 +201,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> boo
 async def async_remove_entry(hass: HomeAssistant, entry: UsgsConfigEntry) -> None:
     """Clean up the persisted cache and any repair issue when a gauge is removed."""
     ir.async_delete_issue(hass, DOMAIN, _demo_key_issue_id(entry))
+    ir.async_delete_issue(hass, DOMAIN, _legacy_backend_issue_id(entry))
     await stats_store(hass, entry.data[CONF_SITE_ID]).async_remove()

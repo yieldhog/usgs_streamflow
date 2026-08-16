@@ -59,4 +59,44 @@ async def test_no_issue_on_legacy_backend(
     await hass.async_block_till_done()
 
     registry = ir.async_get(hass)
+    # No *demo-key* issue on legacy (that's Modern-only)...
     assert registry.async_get_issue(DOMAIN, _issue_id(legacy_entry)) is None
+
+
+def _legacy_issue_id(entry: MockConfigEntry) -> str:
+    return f"legacy_backend_{entry.entry_id}"
+
+
+async def test_legacy_backend_deprecation_issue_raised(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, legacy_entry
+) -> None:
+    aioclient_mock.get(USGS_IV_URL, json=iv_json("00060"))
+    legacy_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(legacy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = ir.async_get(hass)
+    # ...but a legacy entry does get the deprecation nudge.
+    assert (
+        registry.async_get_issue(DOMAIN, _legacy_issue_id(legacy_entry)) is not None
+    )
+
+
+async def test_no_legacy_issue_on_modern_backend(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
+) -> None:
+    aioclient_mock.get(LATEST_URL, json=modern_latest_json("00060"))
+    aioclient_mock.get(CONTINUOUS_URL, json=EMPTY_FC)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"usgs_{SITE_ID}",
+        title=SITE_NAME,
+        data={CONF_SITE_ID: SITE_ID, CONF_SITE_NAME: SITE_NAME},
+        options={CONF_BACKEND: "modern"},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _legacy_issue_id(entry)) is None
