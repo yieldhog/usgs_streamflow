@@ -3,7 +3,7 @@
 **Status:** Phases A–D implemented and shipping in the migration beta. Default
 backend is still **legacy**, so existing entries are unaffected until opted in.
 Phase E (cutover) is future work.
-**Last verified:** 2026-06-19
+**Last verified:** 2026-08-15 (Gate 0 items re-confirmed live; see §11)
 **Migration beta version:** `1.2.0b2` (branch `new-api-transition`, merged to `beta`)
 **Baseline before migration:** `1.1.0b2`
 
@@ -207,9 +207,14 @@ well construction, aquifer, etc.).
 ⚠️ **URL-parameter equality on `monitoring-locations`** (e.g. `?state_code=44&
 site_type_code=ST`) was tested and returned **mixed-state results** (a
 Massachusetts site under `state_code=44`), so its semantics/units are **not
-confirmed**. Prefer the CQL2 `=` operator (which *is* verified, via the
-`agency_code='USGS'` test) for any equality filter here, and confirm `state_code`
-units (FIPS numeric vs. postal) before using it.
+confirmed**. Prefer the CQL2 `=` operator for any equality filter here.
+
+✅ **`state_code` resolved (2026-08-15):** it is **numeric FIPS** (a feature carries
+`state_code:"24"`, `state_name:"Maryland"`). A **CQL2** `{"op":"=","args":[
+{"property":"state_code"},"24"]}` arm **does** constrain results correctly
+(20/20 rows Maryland in a live `%POTOMAC%` test) — unlike the URL-param form.
+`ModernClient.search_sites` converts the flow's two-letter code → FIPS
+(`_STATE_TO_FIPS`) and adds this arm for name searches.
 
 > Note (verified): `latest-continuous` equality via **URL params**
 > (`?monitoring_location_id=...&parameter_code=...`) **does** work cleanly — see
@@ -553,10 +558,10 @@ curl -s "https://api.waterdata.usgs.gov/ogcapi/v0/collections/time-series-metada
 | Risk | Status | Mitigation |
 |---|---|---|
 | `v0 → v1` URL change while alpha | ✅ known | Base URL isolated in `client.py`; one-file edit |
-| `monitoring-locations` URL-param equality semantics (`state_code` units) | ⚠️ unconfirmed | Use CQL2 `=`; confirm units before using `state_code` |
-| Modern missing-data representation (sentinel vs absent) | ⚠️ unconfirmed | Treat absent/non-numeric as `None`; confirm in Phase C |
-| Exact rate-limit numbers / header names | ⚠️ unconfirmed | Read remaining-requests signal; back off on 429 |
-| Statistics/percentile API (future feature) | ⚠️ unverified | Out of scope for this migration |
+| `state_code` filter on `monitoring-locations` | ✅ **resolved (2026-08-15)** | `state_code` is **numeric FIPS**; a **CQL2 `=state_code`** arm constrains results (verified: `=24` → only Maryland). `ModernClient.search_sites` converts the flow's postal code → FIPS via `_STATE_TO_FIPS` and adds the arm. The URL-param form remains unreliable — do not use it. |
+| Modern missing-data representation (sentinel vs absent) | ✅ **resolved (2026-08-15)** | The API **omits** parameters a site doesn't report (0 features), no `-999999` sentinel (verified at the Wickford gage). The client already maps absent/`-999999`/non-numeric → `None`. |
+| Exact rate-limit numbers / header names | ✅ **understood (2026-08-15)** | No proactive `X-RateLimit-*` headers are exposed on 200s; rely on reactive **429 + `Retry-After`** backoff (already implemented). A personal api.data.gov key is needed for multi-site (DEMO_KEY ≈ 30/hr). |
+| Statistics/percentile API | ✅ done | Shipped as the opt-in percent-of-normal feature (daily/continuous endpoints, §7.4/7.5). |
 | Name search strictness (case-sensitive, USGS-only) | ✅ understood | Uppercase term; document the UX in the config flow |
 
 ---
