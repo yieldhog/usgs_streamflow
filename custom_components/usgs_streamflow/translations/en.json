@@ -21,7 +21,7 @@
           "api_key": "API key (optional)"
         },
         "data_description": {
-          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. The current data source doesn't require it \u2014 leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at {signup_url}."
+          "api_key": "Optional api.data.gov key for the USGS Water Data OGC API (used by new sites). Leave blank to use a shared, rate-limited demo key for light use. Get a free key at {signup_url}."
         }
       },
       "reauth_confirm": {
@@ -61,11 +61,11 @@
           "backend": "Data source (advanced)"
         },
         "data_description": {
-          "api_key": "Optional api.data.gov key for the upcoming modernized USGS API. Leave blank to use a shared, rate-limited demo key when the new API is enabled. Get a free key at {signup_url}. Changing this reloads the integration.",
+          "api_key": "Optional api.data.gov key for the USGS Water Data OGC API (the default backend). Leave blank to use a shared, rate-limited demo key for light use. Get a free key at {signup_url}. Changing this reloads the integration.",
           "scan_interval_minutes": "How often to poll USGS. Instantaneous data refreshes about every 15 minutes, so lower values add load without new data.",
           "enabled_parameters": "Unchecked parameters won't create sensors even if the station reports them. Changing this reloads the integration.",
           "enable_stats": "Add Condition, Percentile, and % of Normal sensors for discharge and depth-to-water by comparing the live reading to ~30 years of daily history (the USGS WaterWatch / Groundwater Watch view). The first build downloads the long-term record per gauge, then caches it. Changing this reloads the integration.",
-          "backend": "Which USGS API to poll. Legacy (WaterServices) is the stable default; Modern (Water Data OGC API) is the in-progress replacement and needs an API key. Switch one entry to Modern to compare it against Legacy. Changing this reloads the integration."
+          "backend": "Which USGS API to poll. Modern (Water Data OGC API) is the default for new sites and works best with a free api.data.gov key. Legacy (WaterServices) is deprecated — USGS is retiring it — and a future release removes it. Changing this reloads the integration."
         }
       }
     }
@@ -74,6 +74,10 @@
     "demo_key": {
       "title": "USGS Streamflow is using the shared demo API key",
       "description": "This gauge polls the Modern (Water Data OGC API) backend with the shared, rate-limited api.data.gov demo key, so updates may be throttled. Get a free personal key at {signup_url} and set it in the integration's options to remove the limit."
+    },
+    "legacy_backend": {
+      "title": "USGS legacy API is being retired",
+      "description": "This gauge still polls the legacy USGS WaterServices API, which USGS is decommissioning (planned for early 2027) — and a future update will remove it entirely. To keep this gauge working, switch it to the Modern backend now: enable **Advanced Mode** in your Home Assistant profile, open the integration's **Configure** dialog, set **Data source** to **Modern**, and add a free api.data.gov key ({signup_url})."
     }
   },
   "entity": {

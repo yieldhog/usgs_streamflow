@@ -85,7 +85,37 @@ def modern_tsm_json(*params: str) -> dict:
     }
 
 
+def modern_sites_json(*sites: tuple[str, str]) -> dict:
+    """A monitoring-locations FeatureCollection for the modern site search.
+
+    Each ``site`` is ``(number, name)``; defaults to the canonical test site.
+    """
+    if not sites:
+        sites = ((SITE_ID, SITE_NAME),)
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "monitoring_location_id": f"USGS-{num}",
+                    "monitoring_location_number": num,
+                    "monitoring_location_name": name,
+                    "site_type": "Stream",
+                },
+            }
+            for num, name in sites
+        ],
+        "links": [],
+    }
+
+
+# An empty FeatureCollection (no matches / station reporting nothing).
+EMPTY_FC = {"type": "FeatureCollection", "features": [], "links": []}
+
+
 # A minimal RDB (tab-delimited) site-search response the legacy parser accepts.
+# (Retained for any legacy-path tests; the config flow now searches via modern.)
 SITE_RDB = (
     "# USGS site service\n"
     "agency_cd\tsite_no\tstation_nm\tsite_tp_cd\tdec_lat_va\tdec_long_va\tstate_cd\n"

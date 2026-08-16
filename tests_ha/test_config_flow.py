@@ -14,15 +14,24 @@ from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClien
 
 from custom_components.usgs_streamflow.client import MODERN_BASE_URL
 from custom_components.usgs_streamflow.const import (
+    BACKEND_MODERN,
     CONF_API_KEY,
+    CONF_BACKEND,
     CONF_SITE_ID,
     DOMAIN,
-    USGS_SITE_URL,
 )
 
-from .helpers import SITE_ID, SITE_NAME, SITE_RDB, modern_tsm_json
+from .helpers import (
+    EMPTY_FC,
+    SITE_ID,
+    SITE_NAME,
+    modern_sites_json,
+    modern_tsm_json,
+)
 
 TSM_URL = f"{MODERN_BASE_URL}/collections/time-series-metadata/items"
+# The config flow now searches via the modern OGC API (POST CQL2).
+SEARCH_URL = f"{MODERN_BASE_URL}/collections/monitoring-locations/items"
 
 
 async def _start_user(hass: HomeAssistant):
@@ -34,7 +43,7 @@ async def _start_user(hass: HomeAssistant):
 async def test_user_flow_by_site_number_creates_entry(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    aioclient_mock.get(USGS_SITE_URL, text=SITE_RDB)
+    aioclient_mock.post(SEARCH_URL, json=modern_sites_json())
 
     result = await _start_user(hass)
     assert result["type"] == FlowResultType.FORM
@@ -53,12 +62,14 @@ async def test_user_flow_by_site_number_creates_entry(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["result"].data[CONF_SITE_ID] == SITE_ID
     assert result["result"].title == SITE_NAME
+    # New installs default to the modern backend.
+    assert result["result"].options[CONF_BACKEND] == BACKEND_MODERN
 
 
 async def test_user_flow_no_results(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    aioclient_mock.get(USGS_SITE_URL, text="# nothing\n")
+    aioclient_mock.post(SEARCH_URL, json=EMPTY_FC)
 
     result = await _start_user(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -71,7 +82,7 @@ async def test_user_flow_no_results(
 async def test_user_flow_cannot_connect(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    aioclient_mock.get(USGS_SITE_URL, exc=Exception("boom"))
+    aioclient_mock.post(SEARCH_URL, exc=Exception("boom"))
 
     result = await _start_user(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -94,7 +105,7 @@ async def test_duplicate_site_aborts(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, legacy_entry
 ) -> None:
     legacy_entry.add_to_hass(hass)
-    aioclient_mock.get(USGS_SITE_URL, text=SITE_RDB)
+    aioclient_mock.post(SEARCH_URL, json=modern_sites_json())
 
     result = await _start_user(hass)
     result = await hass.config_entries.flow.async_configure(
