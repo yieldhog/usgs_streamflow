@@ -24,10 +24,10 @@ for each tier.
   strict `mypy.ini` added and a **mypy CI job** (Python 3.13 with real HA
   installed) type-checks the package on every push.
 
-**Bronze, Silver, and Gold are all met in code** (Gold verified by hassfest +
-the harness suite). The remaining work is:
+**Bronze, Silver, Gold, and Platinum are all met in code** (Gold verified by
+hassfest + the harness suite; Platinum `strict-typing` verified by the mypy CI
+job running against real Home Assistant on Python 3.13). The remaining work is:
 - `brands` — the external logo PR (the only thing blocking a formal Bronze badge);
-- Platinum `strict-typing` — add the domain to `.strict-typing` and pass mypy;
 - optional: `entity-disabled-by-default`.
 
 `manifest.json` can now declare `"quality_scale": "gold"`. Do this together with

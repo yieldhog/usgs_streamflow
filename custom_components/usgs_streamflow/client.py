@@ -429,11 +429,11 @@ class LegacyClient:
             except (KeyError, IndexError):
                 continue
 
-            if not value_list:
-                # USGS returned the series header but no data — this is how the
-                # API signals "this parameter was requested but does not exist
-                # at this station."  Skip entirely so no phantom sensor is
-                # created for it.
+            if param_cd is None or not value_list:
+                # No canonical code, or USGS returned the series header but no
+                # data — the latter is how the API signals "this parameter was
+                # requested but does not exist at this station."  Skip entirely
+                # so no phantom sensor is created for it.
                 continue
 
             last_entry = value_list[-1]
@@ -825,6 +825,8 @@ class ModernClient:
             # Key alias codes (e.g. reservoir elevation 00062/62615) under the
             # canonical code so the existing sensor reads the value.
             param_cd = canonical_param(raw_cd)
+            if param_cd is None:
+                continue
             reading_dt = _parse_iso_datetime(props.get("time"))
             existing = readings.get(param_cd)
             if existing is not None and not _is_newer(
