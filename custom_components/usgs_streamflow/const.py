@@ -162,6 +162,8 @@ PARAM_ALIASES: dict[str, str] = {
 
 def canonical_param(code: str | None) -> str | None:
     """Map an alias parameter code to the canonical code the sensor keys on."""
+    if code is None:
+        return None
     return PARAM_ALIASES.get(code, code)
 
 # Parameters that get rate-of-change / trend sensors (level- and flow-type, where

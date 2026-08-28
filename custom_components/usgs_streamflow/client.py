@@ -406,7 +406,7 @@ class LegacyClient:
         return self._parse_latest(data)
 
     @staticmethod
-    def _parse_latest(data) -> LatestResult:
+    def _parse_latest(data: Any) -> LatestResult:
         """Parse USGS NWIS instantaneous-values JSON into a LatestResult."""
         try:
             time_series_list = data["value"]["timeSeries"]
@@ -429,11 +429,11 @@ class LegacyClient:
             except (KeyError, IndexError):
                 continue
 
-            if not value_list:
-                # USGS returned the series header but no data — this is how the
-                # API signals "this parameter was requested but does not exist
-                # at this station."  Skip entirely so no phantom sensor is
-                # created for it.
+            if param_cd is None or not value_list:
+                # No canonical code, or USGS returned the series header but no
+                # data — the latter is how the API signals "this parameter was
+                # requested but does not exist at this station."  Skip entirely
+                # so no phantom sensor is created for it.
                 continue
 
             last_entry = value_list[-1]
@@ -506,7 +506,7 @@ class LegacyClient:
         return _parse_instantaneous_series(data)
 
 
-def _parse_daily_values(data) -> list[tuple[date, float]]:
+def _parse_daily_values(data: Any) -> list[tuple[date, float]]:
     """Flatten a USGS ``dv`` JSON response into ``(date, value)`` pairs."""
     try:
         time_series_list = data["value"]["timeSeries"]
@@ -528,7 +528,7 @@ def _parse_daily_values(data) -> list[tuple[date, float]]:
     return out
 
 
-def _parse_instantaneous_series(data) -> list[tuple[datetime, float]]:
+def _parse_instantaneous_series(data: Any) -> list[tuple[datetime, float]]:
     """Flatten a USGS IV JSON response into ``(reading_time, value)`` pairs.
 
     Unlike ``_parse_latest`` (which keeps only the newest point per series), this
@@ -586,11 +586,11 @@ def _strip_usgs_prefix(value: str) -> str:
     return normalize_site_number(value)
 
 
-def _next_link(envelope: dict) -> str | None:
+def _next_link(envelope: dict[str, Any]) -> str | None:
     """Return the ``next`` page href from an OGC FeatureCollection, if any."""
     for link in envelope.get("links") or []:
         if link.get("rel") == "next" and link.get("href"):
-            return link["href"]
+            return str(link["href"])
     return None
 
 
@@ -631,8 +631,8 @@ class ModernClient:
         url: str,
         *,
         params: dict[str, str] | None = None,
-        cql_body: dict | None = None,
-    ) -> dict:
+        cql_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Perform a request and return parsed JSON, retrying on HTTP 429."""
         session = async_get_clientsession(self._hass)
         timeout = aiohttp.ClientTimeout(total=_REQUEST_TIMEOUT)
@@ -652,7 +652,8 @@ class ModernClient:
                     timeout=timeout,
                 ) as resp:
                     if resp.status == 200:
-                        return await resp.json(content_type=None)
+                        result: dict[str, Any] = await resp.json(content_type=None)
+                        return result
                     if resp.status == 429 and attempt < _MAX_429_RETRIES:
                         retry_delay = _retry_after_seconds(resp, attempt)
                     else:
@@ -668,9 +669,9 @@ class ModernClient:
 
     async def _collect_features(
         self, url: str, params: dict[str, str]
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Fetch all features for an item query, following ``next`` links."""
-        features: list[dict] = []
+        features: list[dict[str, Any]] = []
         next_url: str | None = url
         next_params: dict[str, str] | None = params
         pages = 0
@@ -711,7 +712,7 @@ class ModernClient:
         url = f"{MODERN_BASE_URL}/collections/monitoring-locations/items"
         candidate = normalize_site_number(term)
         if SITE_NUMBER_RE.match(candidate):
-            cql: dict = {
+            cql: dict[str, Any] = {
                 "op": "=",
                 "args": [{"property": "monitoring_location_number"}, candidate],
             }
@@ -824,6 +825,8 @@ class ModernClient:
             # Key alias codes (e.g. reservoir elevation 00062/62615) under the
             # canonical code so the existing sensor reads the value.
             param_cd = canonical_param(raw_cd)
+            if param_cd is None:
+                continue
             reading_dt = _parse_iso_datetime(props.get("time"))
             existing = readings.get(param_cd)
             if existing is not None and not _is_newer(
@@ -906,15 +909,15 @@ def _iso_instant(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _retry_after_seconds(resp, attempt: int) -> float:
+def _retry_after_seconds(resp: aiohttp.ClientResponse, attempt: int) -> float:
     """Delay before retrying a 429: Retry-After if given, else exponential."""
-    retry_after = resp.headers.get("Retry-After")
+    retry_after: str | None = resp.headers.get("Retry-After")
     if retry_after:
         try:
             return max(0.0, float(retry_after))
         except (ValueError, TypeError):
             pass
-    return _BACKOFF_BASE_SECONDS * (2 ** attempt)
+    return _BACKOFF_BASE_SECONDS * float(2 ** attempt)
 
 
 def _is_newer(new_dt: datetime | None, old_dt: datetime | None) -> bool:

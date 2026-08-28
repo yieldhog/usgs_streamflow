@@ -17,7 +17,8 @@ the live value without any extra network traffic.
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from collections.abc import Callable
+from datetime import date, datetime, timedelta
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
@@ -55,7 +56,7 @@ def stats_store(hass: HomeAssistant, site_id: str) -> Store:
     return Store(hass, STORAGE_VERSION, f"{DOMAIN}_stats_{site_id}")
 
 
-def _is_stale(envelope: stats.Envelope, now) -> bool:
+def _is_stale(envelope: stats.Envelope, now: datetime) -> bool:
     """True when an envelope is missing its build time or older than the refresh window."""
     if not envelope.built:
         return True
@@ -198,7 +199,7 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         """Recompute (cheaply) whenever the source coordinator gets fresh values."""
         self.async_set_updated_data(self._compute())
 
-    def attach_source(self):
+    def attach_source(self) -> Callable[[], None]:
         """Subscribe to the source coordinator; returns the unsubscribe callback."""
         return self._source.async_add_listener(self._handle_source_update)
 
