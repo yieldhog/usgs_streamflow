@@ -220,8 +220,6 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
                 buf = self._history[param_cd]
                 for reading_dt, value in sorted(points):
-                    if value is None or reading_dt is None:
-                        continue
                     if buf and reading_dt <= buf[-1][0]:
                         continue
                     buf.append((reading_dt, value))

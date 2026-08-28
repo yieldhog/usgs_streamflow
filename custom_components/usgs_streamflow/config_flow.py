@@ -91,7 +91,7 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Step 1 — Search for a gauge by name or site number."""
         errors: dict[str, str] = {}
 
@@ -149,7 +149,7 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_select_site(
         self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Step 2 — Pick a station from the results list."""
         errors: dict[str, str] = {}
 
@@ -178,7 +178,8 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
 
         options = [
-            {"value": s.site_id, "label": _format_site_label(s)} for s in self._sites
+            SelectOptionDict(value=s.site_id, label=_format_site_label(s))
+            for s in self._sites
         ]
 
         return self.async_show_form(
@@ -208,13 +209,13 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # -- reauth (Modern backend api.data.gov key) -------------------------- #
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Start reauth — the Modern backend rejected the api.data.gov key."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Collect and validate a new api.data.gov key, then reload the entry."""
         entry = self._get_reauth_entry()
         errors: dict[str, str] = {}
@@ -256,7 +257,7 @@ class USGSStreamflowOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Manage the integration options."""
         if user_input is not None:
             # Merge over existing options so a field not shown in this form
