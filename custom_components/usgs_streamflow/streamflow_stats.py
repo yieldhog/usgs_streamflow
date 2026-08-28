@@ -27,6 +27,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
 # WaterWatch condition classes, ordered low -> high.  These are the Condition
 # sensor's enum states, so they are lowercase slugs; the human-readable labels
@@ -215,7 +216,7 @@ class Envelope:
         )
 
     # -- serialization for the persisted cache ----------------------------- #
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "param_cd": self.param_cd,
             "statistic_id": self.statistic_id,
@@ -232,7 +233,7 @@ class Envelope:
         }
 
     @classmethod
-    def from_dict(cls, raw: dict) -> "Envelope":
+    def from_dict(cls, raw: dict[str, Any]) -> "Envelope":
         days = {
             key: DayStat(
                 n=int(entry["n"]),

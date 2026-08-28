@@ -20,7 +20,9 @@ for each tier.
   `reconfiguration-flow`/`dynamic-devices`/`discovery`/`stale-devices` are N/A.
   `entity-disabled-by-default` is left as an optional refinement (largely served
   by the "Parameters to show" options selector).
-- **Platinum:** async + injected websession done; `strict-typing` open.
+- **Platinum:** async + injected websession done; `strict-typing` implemented —
+  strict `mypy.ini` added and a **mypy CI job** (Python 3.13 with real HA
+  installed) type-checks the package on every push.
 
 **Bronze, Silver, and Gold are all met in code** (Gold verified by hassfest +
 the harness suite). The remaining work is:
@@ -178,9 +180,11 @@ badge and the code land in the same PR.
 - [x] ✅ **async-dependency** — no sync dependency; all I/O is async (aiohttp).
 - [x] ✅ **inject-websession** — uses `async_get_clientsession(hass)` rather than
       creating its own session.
-- [ ] ⚠️ **strict-typing** — code is type-annotated but not yet verified under
-      HA's strict-typing mypy config; add the domain to `.strict-typing` and make
-      it pass.
+- [x] ✅ **strict-typing** — a strict `mypy.ini` (mirroring HA's per-integration
+      strict block) type-checks the package, and a `mypy` CI job runs it on
+      Python 3.13 with `homeassistant` installed so the HA base classes resolve
+      to their real types. In core this corresponds to adding the domain to
+      `.strict-typing`.
 
 ---
 

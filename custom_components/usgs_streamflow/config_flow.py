@@ -86,7 +86,7 @@ class USGSStreamflowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         for entry in self.hass.config_entries.async_entries(DOMAIN):
             key = entry.options.get(CONF_API_KEY) or entry.data.get(CONF_API_KEY)
             if key:
-                return key
+                return str(key)
         return ""
 
     async def async_step_user(

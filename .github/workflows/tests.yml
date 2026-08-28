@@ -39,3 +39,21 @@ jobs:
           coverage report --show-missing \
             --include='custom_components/usgs_streamflow/*' \
             --fail-under=95
+
+  mypy:
+    name: Strict typing (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5
+        with:
+          # Home Assistant (pulled in for its real type stubs) requires 3.13.
+          python-version: "3.13"
+      - name: Install typing dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Real HA gives mypy the true types for the base classes the
+          # integration subclasses, so strict checking is meaningful.
+          pip install mypy homeassistant voluptuous
+      - name: Run mypy (strict)
+        run: mypy custom_components/usgs_streamflow

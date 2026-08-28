@@ -465,7 +465,7 @@ async def async_setup_entry(
     # which most gauges do not publish as a daily statistic — so we never leave
     # permanently-unavailable stat entities behind.
     if stats_coordinator is not None:
-        for param_cd, cfg in stats_coordinator.params.items():
+        for param_cd, stats_cfg in stats_coordinator.params.items():
             if (
                 param_cd in params_to_create
                 and param_cd in enabled
@@ -479,7 +479,7 @@ async def async_setup_entry(
                 )
                 # % of Normal only where a ratio to the median is meaningful
                 # (see StatsParamConfig — excluded for datum-relative gauge height).
-                if cfg.percent_of_normal:
+                if stats_cfg.percent_of_normal:
                     entities.append(
                         USGSPercentOfNormalSensor(stats_coordinator, entry, param_cd)
                     )
@@ -779,7 +779,12 @@ class USGSConditionSensor(_USGSStatsSensorBase):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = list(CONDITION_ORDER)
 
-    def __init__(self, coordinator, entry, param_cd) -> None:
+    def __init__(
+        self,
+        coordinator: USGSStatsCoordinator,
+        entry: ConfigEntry,
+        param_cd: str,
+    ) -> None:
         super().__init__(coordinator, entry, param_cd, "condition")
 
     @property
@@ -795,7 +800,12 @@ class USGSPercentileSensor(_USGSStatsSensorBase):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 0
 
-    def __init__(self, coordinator, entry, param_cd) -> None:
+    def __init__(
+        self,
+        coordinator: USGSStatsCoordinator,
+        entry: ConfigEntry,
+        param_cd: str,
+    ) -> None:
         super().__init__(coordinator, entry, param_cd, "percentile")
 
     @property
@@ -811,7 +821,12 @@ class USGSPercentOfNormalSensor(_USGSStatsSensorBase):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 0
 
-    def __init__(self, coordinator, entry, param_cd) -> None:
+    def __init__(
+        self,
+        coordinator: USGSStatsCoordinator,
+        entry: ConfigEntry,
+        param_cd: str,
+    ) -> None:
         super().__init__(coordinator, entry, param_cd, "pct_of_normal")
 
     @property
