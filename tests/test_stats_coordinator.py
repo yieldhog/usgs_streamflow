@@ -230,6 +230,150 @@ class TestEnsureAndCompute(unittest.TestCase):
         self.assertIn("00060", coord.envelopes)
 
 
+class TestNoDailyRecord(unittest.TestCase):
+    """A station with no daily-mean series for a param (e.g. USGS 06711570 has
+    instantaneous gauge height but no 00065 daily record): the empty answer is
+    remembered instead of being refetched and re-warned every check."""
+
+    LOGGER = "custom_components.usgs_streamflow.stats_coordinator"
+
+    def setUp(self):
+        _ha.set_now(NOW)
+
+    def _coord(self, client, params=("00065",)):
+        source = fake_source({p: 3.2 for p in params},
+                             {p: st_dt("2026-06-11") for p in params})
+        cfg = {p: StatsParamConfig(invert=False) for p in params}
+        return USGSStatsCoordinator(object(), source, client, cfg)
+
+    def test_empty_record_marked_logged_at_info_not_warning(self):
+        import logging
+        client = FakeClient([])
+        coord = self._coord(client)
+        with self.assertLogs(self.LOGGER, level="INFO") as logs:
+            run(coord._ensure_envelopes())
+        self.assertEqual(len(client.calls), 1)
+        self.assertIn("00065", coord.no_record)
+        self.assertNotIn("00065", coord.envelopes)
+        self.assertNotIn("00065", coord._warned)
+        levels = [r.levelno for r in logs.records]
+        self.assertIn(logging.INFO, levels)
+        self.assertNotIn(logging.WARNING, levels)
+
+    def test_marked_param_not_refetched_within_window(self):
+        client = FakeClient([])
+        coord = self._coord(client)
+        run(coord._ensure_envelopes())
+        _ha.set_now(NOW + timedelta(days=29))
+        run(coord._ensure_envelopes())   # 12-hour checks inside the window
+        run(coord._ensure_envelopes())
+        self.assertEqual(len(client.calls), 1)
+
+    def test_marked_param_rechecked_after_window(self):
+        client = FakeClient([])
+        coord = self._coord(client)
+        run(coord._ensure_envelopes())
+        first_mark = coord.no_record["00065"]
+        _ha.set_now(NOW + timedelta(days=31))
+        import logging
+        with self.assertLogs(self.LOGGER, level="DEBUG") as logs:
+            logging.getLogger(self.LOGGER).debug("probe")
+            run(coord._ensure_envelopes())
+        self.assertEqual(len(client.calls), 2)
+        # Re-confirmed: mark refreshed, but the info line is not repeated.
+        self.assertNotEqual(coord.no_record["00065"], first_mark)
+        self.assertEqual(
+            [r for r in logs.records if r.levelno >= logging.INFO], []
+        )
+
+    def test_mark_cleared_when_records_appear(self):
+        client = FakeClient([])
+        coord = self._coord(client)
+        run(coord._ensure_envelopes())
+        self.assertIn("00065", coord.no_record)
+        client._records = thirty_years()
+        _ha.set_now(NOW + timedelta(days=31))
+        run(coord._ensure_envelopes())
+        self.assertNotIn("00065", coord.no_record)
+        self.assertIn("00065", coord.envelopes)
+
+    def test_mark_survives_restart_via_store(self):
+        coord = self._coord(FakeClient([]))
+        run(coord._ensure_envelopes())
+        # Fresh coordinator (an HA restart) sharing the persisted store.
+        client2 = FakeClient([])
+        coord2 = self._coord(client2)
+        coord2._store = coord._store
+        run(coord2._ensure_envelopes())
+        self.assertEqual(client2.calls, [])
+        self.assertIn("00065", coord2.no_record)
+
+    def test_only_unmarked_params_fetched(self):
+        # Discharge has a daily record, gauge height does not (Harvard Gulch).
+        class PerParam:
+            def __init__(self):
+                self.calls = []
+            async def get_daily_means(self, site, param, *a):
+                self.calls.append(param)
+                return thirty_years() if param == "00060" else []
+
+        client = PerParam()
+        coord = self._coord(client, params=("00060", "00065"))
+        run(coord._ensure_envelopes())
+        self.assertIn("00060", coord.envelopes)
+        self.assertEqual(set(coord.no_record), {"00065"})
+        _ha.set_now(NOW + timedelta(days=1))
+        run(coord._ensure_envelopes())   # both fresh/marked -> no traffic
+        self.assertEqual(sorted(client.calls), ["00060", "00065"])
+
+    def test_fetch_error_is_not_a_no_record(self):
+        from custom_components.usgs_streamflow.client import UsgsCommunicationError
+
+        class Boom:
+            async def get_daily_means(self, *a):
+                raise UsgsCommunicationError("down")
+
+        coord = self._coord(Boom())
+        with self.assertLogs(self.LOGGER, level="WARNING"):
+            run(coord._ensure_envelopes())
+        self.assertEqual(coord.no_record, {})
+        self.assertIn("00065", coord._warned)
+
+    def test_thin_record_still_warns(self):
+        # Records exist but too few per day for an envelope: unchanged behavior.
+        client = FakeClient([(date(2020, 6, 11), 1.0)])
+        coord = self._coord(client)
+        with self.assertLogs(self.LOGGER, level="WARNING") as logs:
+            run(coord._ensure_envelopes())
+        self.assertIn("No usable daily history", logs.output[0])
+        self.assertEqual(coord.no_record, {})
+
+    def test_load_cache_tolerates_bad_no_record_shapes(self):
+        coord = self._coord(FakeClient([]), params=("00060", "00065"))
+
+        class Store:
+            def __init__(self, data):
+                self.data = data
+            async def async_load(self):
+                return self.data
+
+        coord._store = Store({"envelopes": {}, "no_record": ["not", "a", "dict"]})
+        run(coord._load_cache())
+        self.assertEqual(coord.no_record, {})
+        coord._store = Store({"no_record": {"00065": 12, "99999": "x",
+                                            "00060": "2026-06-01T00:00:00+00:00"}})
+        run(coord._load_cache())
+        self.assertEqual(coord.no_record, {"00060": "2026-06-01T00:00:00+00:00"})
+
+    def test_unparseable_mark_is_rechecked(self):
+        client = FakeClient([])
+        coord = self._coord(client)
+        coord._cache_loaded = True
+        coord.no_record["00065"] = "garbage"
+        run(coord._ensure_envelopes())
+        self.assertEqual(len(client.calls), 1)
+
+
 def st_dt(d):
     """A tz-aware datetime at midnight for an ISO date (for reading_times)."""
     return datetime.fromisoformat(d).replace(tzinfo=timezone.utc)

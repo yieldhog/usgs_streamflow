@@ -50,6 +50,7 @@ class CoordinatorData:
         offline_reason: str | None,
         reported_params: set[str],
         reading_attrs: dict[str, dict[str, str | None]] | None = None,
+        seasonal: bool = False,
     ) -> None:
         self.values = values                    # param_cd -> float | None
         self.reading_times = reading_times      # param_cd -> datetime of last value
@@ -66,6 +67,10 @@ class CoordinatorData:
         # modern backend; the legacy backend leaves the values None, so nothing
         # extra appears on legacy entities.
         self.reading_attrs = reading_attrs or {}
+        # True when USGS itself marks the station as shut down for the season
+        # (a seasonal qualifier on value-less latest readings), as opposed to
+        # offline status inferred only from stale timestamps.
+        self.seasonal = seasonal
 
 
 class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -305,7 +310,31 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
         station_offline = False
         offline_reason: str | None = None
 
-        if reported_params and not any_recent:
+        # USGS's own seasonal signal: when a seasonal gauge shuts down it
+        # publishes a value-less placeholder reading carrying a seasonal
+        # qualifier, timestamped at shutdown.  Trust it when *no* parameter has a
+        # real value — this catches the shutdown immediately, instead of after
+        # the STALE_READING_HOURS window, during which the placeholder's recent
+        # timestamp would otherwise make the station look active.
+        seasonal = (
+            bool(latest.readings)
+            and all(r.value is None for r in latest.readings.values())
+            and any(r.seasonal for r in latest.readings.values())
+        )
+
+        if seasonal:
+            station_offline = True
+            latest_times = [t for t in reading_times.values() if t is not None]
+            since = (
+                f" since {max(latest_times).strftime('%Y-%m-%d')}"
+                if latest_times
+                else ""
+            )
+            offline_reason = (
+                "Seasonal shutdown — USGS marks this gauge as monitored "
+                f"seasonally; no data{since}."
+            )
+        elif reported_params and not any_recent:
             station_offline = True
             latest_times = [t for t in reading_times.values() if t is not None]
             if latest_times:
@@ -327,4 +356,5 @@ class USGSStreamflowCoordinator(DataUpdateCoordinator[CoordinatorData]):
             offline_reason=offline_reason,
             reported_params=reported_params,
             reading_attrs=reading_attrs,
+            seasonal=seasonal,
         )

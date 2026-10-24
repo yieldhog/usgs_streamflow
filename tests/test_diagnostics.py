@@ -29,6 +29,7 @@ def _latest():
         offline_reason=None,
         reported_params={"00060", "00065"},
         reading_attrs={"00060": {"approval_status": "Provisional"}},
+        seasonal=False,
     )
 
 
@@ -47,6 +48,7 @@ class TestCoordinatorDiagnostics(unittest.TestCase):
             d["latest"]["reading_attrs"]["00060"]["approval_status"], "Provisional"
         )
         self.assertEqual(d["latest"]["reported_params"], ["00060", "00065"])
+        self.assertIs(d["latest"]["seasonal"], False)
 
 
 class TestStatsDiagnostics(unittest.TestCase):
@@ -66,9 +68,11 @@ class TestStatsDiagnostics(unittest.TestCase):
             params={"00060": object()},
             envelopes={"00060": env},
             data={"00060": res},
+            no_record={"00065": "2026-06-11T00:00:00+00:00"},
         )
         d = diag._stats_diagnostics(stats)
         self.assertEqual(d["params"], ["00060"])
+        self.assertEqual(d["no_record"], {"00065": "2026-06-11T00:00:00+00:00"})
         self.assertEqual(d["envelopes"]["00060"]["day_count"], 1)
         self.assertEqual(d["envelopes"]["00060"]["years"], 30)
         self.assertEqual(d["results"]["00060"]["condition"], "Normal")

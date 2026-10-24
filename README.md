@@ -314,7 +314,10 @@ history (percentile/condition) is meaningful, but a *ratio* to the median isn't
 Note that USGS publishes a daily-mean **stage** record for only a minority of
 gauges, so the gauge-height stat sensors are created **only where that record
 exists** — on most gauges you'll see them for discharge (and depth-to-water)
-but not gauge height.
+but not gauge height. When USGS answers with no daily-mean record for a
+parameter, the integration logs that once (at info level), remembers it on disk,
+and re-checks only about monthly instead of re-requesting it on every check or
+restart.
 
 The long-term record is fetched once per gauge (a heavy pull), then **persisted
 on disk** and refreshed only about monthly, so it costs nothing on normal polls.
@@ -330,7 +333,8 @@ is plenty.
 ### Station Status
 
 Always present. State is `Active` or `Offline`; when offline it carries an
-`offline_reason` (seasonal/stale). See
+`offline_reason` (seasonal/stale), and a `seasonal` attribute is `true` when
+USGS itself flags the gauge as shut down for the season. See
 [Seasonal & offline handling](#seasonal--offline-handling).
 
 ### Entity attributes
@@ -340,7 +344,7 @@ Always present. State is `Active` or `Offline`; when offline it carries an
 | Measurement sensors | `usgs_site_id`, `last_reading_time` (when available). On the **Modern** backend also `approval_status` (`Approved`/`Provisional`), a `provisional` boolean (`true` until USGS approves the value), `qualifier`, `statistic_id`, `time_series_id`. |
 | Rate / Trend sensors | `usgs_site_id`, `window_minutes`, `sample_count` (Trend also `rate_per_hour`). |
 | Condition / Percentile / % of Normal | `usgs_site_id`, `percentile`, `percent_of_normal`, `condition`, `median`, `sample_count`, `observation_date`, `inverted`, plus `record_years` / `record_start` / `record_end`. |
-| Station Status | `usgs_site_id`, `usgs_waterdata_url`, and `offline_reason` when offline. |
+| Station Status | `usgs_site_id`, `usgs_waterdata_url`, `seasonal` (`true` when USGS flags a seasonal shutdown), and `offline_reason` when offline. |
 
 ## Data sources
 
@@ -404,6 +408,11 @@ transmitting. The integration handles this explicitly:
 - The **Station Status** sensor reports `Offline` and explains why via
   `offline_reason` (e.g. "data is stale — last reading …" or "seasonal or
   discontinued").
+- When a seasonal gauge shuts down, USGS publishes a value-less placeholder
+  reading flagged as seasonal (`Ssn` on the Legacy backend, `SEASONAL` on
+  Modern). The integration recognizes that flag and reports `Offline` with
+  `seasonal: true` and a "Seasonal shutdown … no data since <date>" reason
+  **right away**, rather than waiting out the 48-hour staleness window.
 - Measurement sensors for that site become **`Unavailable`** (not a misleading
   stale value or `Unknown`) while it's offline, and recover automatically when
   the gauge resumes.
