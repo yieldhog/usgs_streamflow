@@ -37,6 +37,7 @@ def _coordinator_diagnostics(coordinator: USGSStreamflowCoordinator) -> dict[str
             },
             "station_offline": data.station_offline,
             "offline_reason": data.offline_reason,
+            "seasonal": data.seasonal,
             "reported_params": sorted(data.reported_params),
             # Per-parameter metadata (approval status, qualifier, statistic /
             # time-series id) — populated by the modern backend, all-None on
@@ -72,6 +73,8 @@ def _stats_diagnostics(stats: USGSStatsCoordinator | None) -> dict[str, Any] | N
     return {
         "params": list(stats.params),
         "envelopes": envelopes,
+        # Params USGS answered with an empty daily-mean record, and when.
+        "no_record": dict(stats.no_record),
         "results": results,
     }
 

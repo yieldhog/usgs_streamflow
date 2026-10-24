@@ -58,12 +58,17 @@ def stats_store(hass: HomeAssistant, site_id: str) -> Store:
 
 def _is_stale(envelope: stats.Envelope, now: datetime) -> bool:
     """True when an envelope is missing its build time or older than the refresh window."""
-    if not envelope.built:
+    return _older_than_refresh(envelope.built, now)
+
+
+def _older_than_refresh(stamp: str | None, now: datetime) -> bool:
+    """True when an ISO timestamp is missing, unparseable, or past the refresh window."""
+    if not stamp:
         return True
-    built = dt_util.parse_datetime(envelope.built)
-    if built is None:
+    parsed = dt_util.parse_datetime(stamp)
+    if parsed is None:
         return True
-    return (now - built) > timedelta(days=STATS_REFRESH_DAYS)
+    return (now - parsed) > timedelta(days=STATS_REFRESH_DAYS)
 
 
 class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
@@ -97,6 +102,14 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         # repeating every refresh check; an entry is cleared on the next
         # successful rebuild so a later failure logs afresh.
         self._warned: set[str] = set()
+        # param_cd -> ISO time USGS last answered a daily-means query for it
+        # with zero records.  Many gauges publish instantaneous values for a
+        # parameter (often gauge height) without ever computing a daily mean,
+        # so an empty answer is a stable property of the station rather than a
+        # transient failure.  Persisted with the envelopes so neither a restart
+        # nor the 12-hour check re-downloads an empty record; re-checked once
+        # per STATS_REFRESH_DAYS in case USGS starts publishing one.
+        self.no_record: dict[str, str] = {}
 
     # -- coordinator update ------------------------------------------------ #
     async def _async_update_data(self) -> dict[str, stats.StatsResult]:
@@ -111,14 +124,23 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
             self._cache_loaded = True
 
         now = dt_util.utcnow()
-        rebuilt = False
+        dirty = False
         for param in self.params:
             existing = self.envelopes.get(param)
             if existing is not None and not _is_stale(existing, now):
                 continue
+            if param in self.no_record and not _older_than_refresh(
+                self.no_record[param], now
+            ):
+                # USGS recently confirmed there is no daily record to fetch.
+                # (A stale envelope from before, if any, is kept meanwhile.)
+                continue
+            no_record_before = self.no_record.get(param)
             if await self._rebuild(param):
-                rebuilt = True
-        if rebuilt:
+                dirty = True
+            elif self.no_record.get(param) != no_record_before:
+                dirty = True
+        if dirty:
             await self._save_cache()
 
     async def _rebuild(self, param: str) -> bool:
@@ -127,6 +149,12 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
         Returns ``True`` when a usable envelope was produced.  A fetch failure is
         logged and swallowed so it never breaks setup or the polling cycle; the
         previous cached envelope (if any) is kept and the rebuild retried later.
+
+        A *successful* fetch that returns no records at all means the station
+        has no daily-mean series for ``param``.  That is recorded in
+        ``no_record`` (and persisted by the caller) instead of being treated as
+        a failure, so it is logged once at info level and not re-fetched until
+        the refresh window passes.
         """
         end = dt_util.utcnow().date()
         start = date(end.year - STATS_RECORD_YEARS, 1, 1)
@@ -143,6 +171,21 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
                 )
                 self._warned.add(param)
             return False
+
+        if not records:
+            first_time = param not in self.no_record
+            self.no_record[param] = dt_util.utcnow().isoformat()
+            self._warned.discard(param)
+            if first_time:
+                _LOGGER.info(
+                    "USGS publishes no daily-mean record for %s param %s; "
+                    "condition / percentile statistics are not available for it "
+                    "(re-checked every %d days)",
+                    self._source.site_id, param, STATS_REFRESH_DAYS,
+                )
+            return False
+        # Records exist again, so any earlier "no record" finding is obsolete.
+        self.no_record.pop(param, None)
 
         envelope = stats.build_envelope(
             records,
@@ -222,11 +265,23 @@ class USGSStatsCoordinator(DataUpdateCoordinator[dict[str, stats.StatsResult]]):
             except (KeyError, ValueError, TypeError):
                 # A corrupt or out-of-schema cache entry is simply rebuilt.
                 _LOGGER.debug("Discarding unreadable stats cache for %s", param)
+        # Additive key: caches written before it existed simply lack it, and an
+        # older version of the integration ignores it, so no store migration.
+        no_record = data.get("no_record")
+        if isinstance(no_record, dict):
+            for param, stamp in no_record.items():
+                if param in self.params and isinstance(stamp, str):
+                    self.no_record[param] = stamp
 
     async def _save_cache(self) -> None:
         try:
             await self._store.async_save(
-                {"envelopes": {p: e.to_dict() for p, e in self.envelopes.items()}}
+                {
+                    "envelopes": {
+                        p: e.to_dict() for p, e in self.envelopes.items()
+                    },
+                    "no_record": dict(self.no_record),
+                }
             )
         except Exception as err:  # noqa: BLE001 - a failed write must not disrupt stats
             # The envelope is already held in memory; a persistence failure just

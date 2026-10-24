@@ -46,6 +46,24 @@ _REQUEST_TIMEOUT = 30
 # (whether the modern API emits it is unverified — see MIGRATION.md §7.3).
 _MISSING_VALUE_SENTINEL = -999999.0
 
+# Qualifiers USGS attaches to the placeholder reading it publishes when a
+# seasonally monitored gauge shuts down for the season.  Verified live against
+# USGS 06711570 (Harvard Gulch, CO) in October 2026: the legacy IV service
+# returns value -999999 with qualifiers ["P", "Ssn"] ("Parameter monitored
+# seasonally"); the modern latest-continuous collection returns value null with
+# qualifier ["SEASONAL"].
+_LEGACY_SEASONAL_QUALIFIER = "Ssn"
+_MODERN_SEASONAL_QUALIFIER = "SEASONAL"
+
+
+def _has_qualifier(raw: Any, code: str) -> bool:
+    """True when a qualifier field (a string or a list of strings) contains ``code``."""
+    if isinstance(raw, str):
+        return raw == code
+    if isinstance(raw, (list, tuple)):
+        return code in raw
+    return False
+
 
 def _parse_iso_datetime(dt_str: Any) -> datetime | None:
     """Parse an ISO-8601 / RFC 3339 timestamp into a tz-aware datetime.
@@ -156,6 +174,9 @@ class Reading:
     qualifier: str | None = None
     statistic_id: str | None = None
     time_series_id: str | None = None
+    # USGS flagged this reading as belonging to a seasonally monitored
+    # parameter (both backends; see _LEGACY/_MODERN_SEASONAL_QUALIFIER).
+    seasonal: bool = False
 
 
 @dataclass
@@ -442,6 +463,9 @@ class LegacyClient:
                 reading_time=_parse_iso_datetime(last_entry.get("dateTime")),
                 approval_status=None,
                 qualifier=None,
+                seasonal=_has_qualifier(
+                    last_entry.get("qualifiers"), _LEGACY_SEASONAL_QUALIFIER
+                ),
             )
 
         return LatestResult(readings=readings, station_reporting=True)
@@ -840,6 +864,9 @@ class ModernClient:
                 qualifier=props.get("qualifier"),
                 statistic_id=props.get("statistic_id"),
                 time_series_id=props.get("time_series_id"),
+                seasonal=_has_qualifier(
+                    props.get("qualifier"), _MODERN_SEASONAL_QUALIFIER
+                ),
             )
 
         # Any features at all means the station is reporting; an empty collection

@@ -522,8 +522,12 @@ class USGSStationStatusSensor(
                 f"{self.coordinator.site_id}/"
             ),
         }
-        if self.coordinator.data and self.coordinator.data.offline_reason:
-            attrs["offline_reason"] = self.coordinator.data.offline_reason
+        if self.coordinator.data:
+            # State stays Active/Offline (automations may key on it); this says
+            # whether an Offline came from USGS's explicit seasonal flag.
+            attrs["seasonal"] = self.coordinator.data.seasonal
+            if self.coordinator.data.offline_reason:
+                attrs["offline_reason"] = self.coordinator.data.offline_reason
         return attrs
 
 
