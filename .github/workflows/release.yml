@@ -1,0 +1,40 @@
+name: Release
+
+# Package the integration as a zip and attach it to the GitHub release. HACS is
+# told to install from this asset (zip_release/filename in hacs.json), and asset
+# downloads are the only figure GitHub — and therefore HACS — counts: the
+# auto-generated "Source code" archive is not tracked.
+
+on:
+  release:
+    types: [published]
+  # Manual run to (re)attach the asset to an existing tag — e.g. to backfill a
+  # release published before this workflow existed.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the zip to (e.g. v1.4.2)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release-zip:
+    name: Attach release zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - name: Build the integration zip
+        # HACS extracts the asset into custom_components/usgs_streamflow/, so the
+        # integration's files must sit at the zip root, not under a folder.
+        run: |
+          cd custom_components/usgs_streamflow
+          zip -r usgs_streamflow.zip . -x '*__pycache__*' '*.pyc'
+      - name: Attach the zip to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: custom_components/usgs_streamflow/usgs_streamflow.zip
